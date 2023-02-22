@@ -20,6 +20,13 @@ func main() {
 		log.Fatal(err)
 	}
 	for {
+		reader := bufio.NewReader(os.Stdin) //read input
+		fmt.Print(">>> ")
+		txt, err := reader.ReadString('\n') //take in what is after the newline
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Fprintf(c, txt + "\n") //print connection text and your text
 		
 	}
 
