@@ -19,6 +19,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Print("Welcome to the TCP client.\nType your message and hit enter.\nType STOP to stop.\n")
 	for {
 		reader := bufio.NewReader(os.Stdin) //read input
 		fmt.Print(">>> ")
@@ -26,8 +27,14 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Fprintf(c, txt + "\n") //print connection text and your text
-		
+		fmt.Fprintf(c, txt + "\n") //print connection and your text
+		msg, _ := bufio.NewReader(c).ReadString('\n') //read what the server sends you
+		fmt.Print("->: " + msg) //print out the server's message
+		if strings.TrimSpace(string(txt)) == "STOP" { //if the user enters stop...
+			fmt.Println("TCP client now exiting. Goodbye!")
+			c.Close() //close connection
+			return
+		}
 	}
 
 }
