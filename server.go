@@ -24,7 +24,7 @@ func handleConnection(c net.Conn) {
 		if temp == "STOP" {
 			return
 		}
-		fmt.Println(temp)
+		fmt.Println(strings.ToUpper(temp))
 		counter := strconv.Itoa(count) + "\n"
 
 		c.Write([]byte(string(counter)))
