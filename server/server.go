@@ -6,28 +6,27 @@ import (
 	"log"
 	"net"
 	"os"
-	//"strconv"
 	"strings"
 )
 
 var count = 0
 
-func handleConnection(c net.Conn) {
+func handleConnection(conn net.Conn) {
 	for {
-		netData, err := bufio.NewReader(c).ReadString('\n')
+		netData, err := bufio.NewReader(conn).ReadString('\n')
 		if err != nil {
-			log.Fatal(err)
+			fmt.Println(err)
+			return
 		}
 
 		temp := strings.TrimSpace(string(netData))
 		if temp == "STOP" {
 			break
 		}
-		fmt.Println(strings.ToUpper(temp)) // echoing back user input in uppercase
-		//counter := strconv.Itoa(count) + "\n"
-		//c.Write([]byte(string(counter)))
+		response := fmt.Sprintf(strings.ToUpper(temp))
+		conn.Write([]byte(response)) // echoing user input in uppercase
 	}
-	c.Close()
+	conn.Close()
 }
 
 func main() {
@@ -38,17 +37,18 @@ func main() {
 	}
 
 	PORT := ":" + arguments[1]
-	l, err := net.Listen("tcp4", PORT)
+	listener, err := net.Listen("tcp4", PORT)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer l.Close()
+	defer listener.Close()
 
 	for { // Endless loop because the server is constantly running
 		//only stops if handleConnection() reads STOP
-		c, err := l.Accept()
+		c, err := listener.Accept()
 		if err != nil {
 			log.Fatal(err)
+
 		}
 		go handleConnection(c) // Each client served by a different goroutine
 		count++
