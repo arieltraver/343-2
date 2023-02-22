@@ -27,8 +27,9 @@ func handleConnection(c net.Conn) {
 		fmt.Println(temp)
 		counter := strconv.Itoa(count) + "\n"
 
-		c.Write([]byte(string(counter))) // write time to channel
+		c.Write([]byte(string(counter)))
 	}
+	c.Close()
 }
 
 func main() {
@@ -40,18 +41,16 @@ func main() {
 
 	PORT := ":" + arguments[1]
 	l, err := net.Listen("tcp", PORT)
-	if err != nil { // Port could be already in use, could be internal failure, could be overloaded with priorities
-		fmt.Println(err)
-		return
+	if err != nil {
+		log.Fatal(err)
 	}
-	defer l.Close() // Delay the closure of the listener until after the function terminates, but
-	// the port needs to be closed to ensure the computer has resources
+	defer l.Close() // Need to close port to ensure the computer has resources
 
-	for { // endless loop because the server is constantly running - only stops if handleConnection() reads STOP
+	for { // Endless loop because the server is constantly running
+		//only stops if handleConnection() reads STOP
 		c, err := l.Accept()
 		if err != nil {
-			fmt.Println(err)
-			return
+			log.Fatal(err)
 		}
 		go handleConnection(c) // Each client served by a different goroutine
 		count++

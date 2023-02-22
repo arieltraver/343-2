@@ -1,14 +1,16 @@
 //used tutorial here: https://www.linode.com/docs/guides/developing-udp-and-tcp-clients-and-servers-in-go/
 
 package main
+
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"strings"
-	"log"
 )
+
 func main() {
 	args := os.Args
 	if len(args) <= 1 {
@@ -27,12 +29,18 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+<<<<<<< HEAD
 		fmt.Fprintf(c, txt + "\n") //print connection and your text
 		msg, err := bufio.NewReader(c).ReadString('\n') //read what the server sends you
 		if err != nil {
 			log.Fatal("Server failed to respond")
 		}
 		fmt.Print("->: " + msg) //print outlsthe server's message
+=======
+		fmt.Fprintf(c, txt+"\n")                      //print connection and your text
+		msg, _ := bufio.NewReader(c).ReadString('\n') //read what the server sends you
+		fmt.Print("->: " + msg)                       //print out the server's message
+>>>>>>> 4741160f9f8c8f72f84dcaabb33e9d2ceb3246ce
 		if strings.TrimSpace(string(txt)) == "STOP" { //if the user enters stop...
 			fmt.Println("TCP client now exiting. Goodbye!")
 			c.Close() //close connection
