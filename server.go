@@ -6,28 +6,26 @@ import (
 	"log"
 	"net"
 	"os"
-	"strconv"
+	//"strconv"
 	"strings"
 )
 
 var count = 0
 
 func handleConnection(c net.Conn) {
-	fmt.Print(".")
 	for {
-		netData, err := bufio.NewReader(c).ReadString('\n') // if there's nothing to read, the code will stop at ln 34
+		netData, err := bufio.NewReader(c).ReadString('\n')
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		temp := strings.TrimSpace(string(netData))
 		if temp == "STOP" {
-			return
+			break
 		}
-		fmt.Println(strings.ToUpper(temp))
-		counter := strconv.Itoa(count) + "\n"
-
-		c.Write([]byte(string(counter)))
+		fmt.Println(strings.ToUpper(temp)) // echoing back user input in uppercase
+		//counter := strconv.Itoa(count) + "\n"
+		//c.Write([]byte(string(counter)))
 	}
 	c.Close()
 }
@@ -40,11 +38,11 @@ func main() {
 	}
 
 	PORT := ":" + arguments[1]
-	l, err := net.Listen("tcp", PORT)
+	l, err := net.Listen("tcp4", PORT)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer l.Close() // Need to close port to ensure the computer has resources
+	defer l.Close()
 
 	for { // Endless loop because the server is constantly running
 		//only stops if handleConnection() reads STOP
