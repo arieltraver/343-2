@@ -22,11 +22,10 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Print("Welcome to the TCP client.\nType your message and hit enter.\nType STOP to stop.\n")
-	scanner := bufio.NewScanner(os.Stdin) //read standard input
-	serverScanner := bufio.NewScanner(c) //read what the server sends you
 
 	for {
 		fmt.Print(">>> ")
+		scanner := bufio.NewScanner(os.Stdin) //read standard input
 		if scanner.Scan() {
 			txt := scanner.Text()
 			fmt.Fprintf(c, txt+"\n")
@@ -41,6 +40,7 @@ func main() {
 			c.Close()
 			return
 		}
+		serverScanner := bufio.NewScanner(c) //read what the server sends you
 		if serverScanner.Scan() {
 			msg := serverScanner.Text()
 			fmt.Print("->: " + msg)  	
