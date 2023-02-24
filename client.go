@@ -25,9 +25,10 @@ func main() {
 	for {
 		reader := bufio.NewReader(os.Stdin) //read input
 		fmt.Print(">>> ")
-		txt, err := reader.ReadString('\n') //take in what is after the newline
+		txt, err := reader.ReadString('\n') //take in text until the newline
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			return
 		}
 		fmt.Fprintf(c, txt+"\n")                      //print connection and your text
 		msg, _ := bufio.NewReader(c).ReadString('\n') //read what the server sends you

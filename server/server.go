@@ -15,7 +15,7 @@ func handleConnection(conn net.Conn) {
 	for {
 		netData, err := bufio.NewReader(conn).ReadString('\n')
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err) //prints to standard error
 			return
 		}
 
@@ -43,14 +43,17 @@ func main() {
 	}
 	defer listener.Close()
 
+	fmt.Println("listening on port", arguments[1])
+
 	for { // Endless loop because the server is constantly running
 		//only stops if handleConnection() reads STOP
-		c, err := listener.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
-			log.Fatal(err)
-
+			log.Println("failed connection")
+		} else { //if one connection fails you can have more
+			fmt.Println("new host joining:", conn.RemoteAddr())
+			go handleConnection(conn) // Each client served by a different goroutine
+			count++
 		}
-		go handleConnection(c) // Each client served by a different goroutine
-		count++
 	}
 }
