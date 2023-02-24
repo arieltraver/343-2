@@ -26,10 +26,11 @@ func handleConnection(c net.Conn) {
 		}
 		fmt.Println(temp) // echoing user input in uppercase
 		counter := strconv.Itoa(count) + "\n"
-		c.Write([]byte(string(counter))) 
+		c.Write([]byte(string(counter)))
+	}
 	c.Close()
-}
 
+}
 func main() {
 	arguments := os.Args
 	if len(arguments) == 1 {
