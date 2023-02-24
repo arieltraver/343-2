@@ -24,10 +24,9 @@ func handleConnection(c net.Conn) {
 		if temp == "STOP" {
 			break
 		}
-		fmt.Println(temp)
+		fmt.Println(temp) // echoing user input in uppercase
 		counter := strconv.Itoa(count) + "\n"
-		c.Write([]byte(string(counter))) // echoing user input in uppercase
-	}
+		c.Write([]byte(string(counter))) 
 	c.Close()
 }
 
