@@ -6,27 +6,30 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 )
 
 var count = 0
 
-func handleConnection(conn net.Conn) {
+func handleConnection(c net.Conn) {
 	for {
-		netData, err := bufio.NewReader(conn).ReadString('\n')
+		netData, err := bufio.NewReader(c).ReadString('\n')
 		if err != nil {
 			log.Println(err) //prints to standard error
 			return
 		}
 
 		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
-		fmt.Printf(temp)
 		if temp == "STOP" {
 			break
 		}
-		conn.Write([]byte(temp)) // echoing user input in uppercase
+		fmt.Println(temp)
+		counter := strconv.Itoa(count) + "\n"
+		c.Write([]byte(string(counter)))
+		//c.Write([]byte(temp)) // echoing user input in uppercase
 	}
-	conn.Close()
+	c.Close()
 }
 
 func main() {
@@ -37,9 +40,10 @@ func main() {
 	}
 
 	PORT := ":" + arguments[1]
-	listener, err := net.Listen("tcp", PORT)
+	listener, err := net.Listen("tcp4", PORT)
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 	defer listener.Close()
 
@@ -50,8 +54,9 @@ func main() {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Println("failed connection")
+			return
 		} else { //if one connection fails you can have more
-			fmt.Println("new host joining:", conn.RemoteAddr())
+			//fmt.Println("new host joining:", conn.RemoteAddr())
 			go handleConnection(conn) // Each client served by a different goroutine
 			count++
 		}
