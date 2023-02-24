@@ -19,12 +19,12 @@ func handleConnection(conn net.Conn) {
 			return
 		}
 
-		temp := strings.TrimSpace(string(netData))
+		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
+		fmt.Printf(temp)
 		if temp == "STOP" {
 			break
 		}
-		response := fmt.Sprintf(strings.ToUpper(temp))
-		conn.Write([]byte(response)) // echoing user input in uppercase
+		conn.Write([]byte(temp)) // echoing user input in uppercase
 	}
 	conn.Close()
 }
@@ -37,7 +37,7 @@ func main() {
 	}
 
 	PORT := ":" + arguments[1]
-	listener, err := net.Listen("tcp4", PORT)
+	listener, err := net.Listen("tcp", PORT)
 	if err != nil {
 		log.Fatal(err)
 	}
