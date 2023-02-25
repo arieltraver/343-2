@@ -29,11 +29,14 @@ func main() {
 		fmt.Print(">>> ")
 		txt, err := reader.ReadString('\n') //take in text until the newline
 		if err != nil {
-			log.Println(err)
+			log.Fatal(err) //clientside logs are fatal, server not
 			return
 		}
 		fmt.Fprintf(c, txt+"\n")                      //print connection and your text
-		msg, _ := bufio.NewReader(c).ReadString('\n') //read what the server sends you
+		msg, err := bufio.NewReader(c).ReadString('\n') //read what the server sends you
+		if err != nil {
+			log.Fatal(err)
+		}
 		fmt.Print("->: " + msg)                       //print out the server's message
 		if strings.TrimSpace(string(txt)) == "STOP" { //if the user enters stop...
 			fmt.Println("TCP client now exiting. Goodbye!")

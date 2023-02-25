@@ -19,7 +19,7 @@ func handleConnection(c net.Conn) {
 			log.Println(err) //prints to standard error
 			return
 		}
-		fmt.Println(string(netData))
+		fmt.Print(string(netData))
 		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
 		if temp == "STOP" {
 			break
