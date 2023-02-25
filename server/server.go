@@ -19,14 +19,14 @@ func handleConnection(c net.Conn) {
 			log.Println(err) //prints to standard error
 			return
 		}
-
+		fmt.Println(string(netData))
 		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
 		if temp == "STOP" {
 			break
 		}
-		fmt.Println(temp) // echoing user input in uppercase
 		counter := strconv.Itoa(count) + "\n"
-		c.Write([]byte(string(counter)))
+		fmt.Fprintf(c, counter) //send counter
+
 	}
 	c.Close()
 
@@ -55,7 +55,7 @@ func main() {
 			log.Println("failed connection")
 			return
 		} else { //if one connection fails you can have more
-			//fmt.Println("new host joining:", conn.RemoteAddr())
+			fmt.Println("new host joining:", conn.RemoteAddr())
 			go handleConnection(conn) // Each client served by a different goroutine
 			count++
 		}
