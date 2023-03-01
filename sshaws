@@ -1,4 +1,5 @@
 #!/bin/zsh
+#replace !/bin/zsh with !/bin/bash if you're using bash
 
 cd ~/.ssh
 if [ $# -lt 1 ]
@@ -8,7 +9,7 @@ then
 else
     case "$1" in
         1)
-            string='example-name.compute.amazonaws.com' # replace with your names
+            string='example-name.compute.amazonaws.com' #replace with your names
             ;;
         2)
             string='example-name2.compute.amazonaws.com'
@@ -23,5 +24,5 @@ else
             string='example-name5.compute.amazonaws.com'
             ;;
     esac
-    ssh -i "my-ssh-key.pem" $string # replace my-ssh-key.pem with the name of your key
+    ssh -i "my-ssh-key.pem" $string #replace my-ssh-key.pem with the name of your key
 fi
