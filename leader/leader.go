@@ -93,20 +93,24 @@ func readAndSplit(directory string, numHosts int) *[][][]byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fileSize := fileInfo.Size()                                                 // get file size
-	chunkSize := int(math.Ceil(float64(float64(fileSize) / float64(numHosts)))) //size of chunk per each host
-	fmt.Println("chunksize is", chunkSize)
-	fmt.Println("filesize is", fileSize)
+
+	fileSize := fileInfo.Size()                                        // get file size
+	chunkSize := int(math.Ceil(float64(fileSize) / float64(numHosts))) //size of chunk per each host
+	fmt.Println("chunksize is", chunkSize, "| filesize is", fileSize)
 
 	buffers := make([][][]byte, numHosts)
 	read := 0
 	for i := 0; i < numHosts; i++ {
-		partSize := int(math.Min(float64(chunkSize), float64(fileSize-int64(i*chunkSize))))
-		buff := make([]byte, partSize)
+		//partSize := int(math.Min(float64(chunkSize), float64(fileSize-int64(i*chunkSize))))
+		buff := make([]byte, chunkSize)
 		fmt.Println("length of buffer:", len(buff))
-
 		fmt.Println("chunk num:", i+1)
+
 		bytesRead, err := file.Read(buff) //read the length of buffer from file
+		if err == io.EOF {
+			fmt.Println("reached end of file, chunks read:", i)
+			break
+		}
 		if err != nil {
 			if err == io.EOF {
 				fmt.Println("reached end of file, chunks read:", i)
@@ -117,8 +121,8 @@ func readAndSplit(directory string, numHosts int) *[][][]byte {
 		}
 		read += bytesRead
 		fmt.Println("bytes read:", bytesRead)
-		fmt.Println("total bytes read:", read)
 		buffers[i] = [][]byte{{0}, buff}
 	}
+	fmt.Println("total bytes read:", read)
 	return &buffers
 }
