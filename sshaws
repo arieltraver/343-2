@@ -1,0 +1,27 @@
+#!/bin/zsh
+
+cd ~/.ssh
+if [ $# -lt 1 ]
+then
+    echo "specify a number 1 2 3 4 or 5"
+    return
+else
+    case "$1" in
+        1)
+            string='example-name.compute.amazonaws.com' # replace with your names
+            ;;
+        2)
+            string='example-name2.compute.amazonaws.com'
+            ;;
+        3)
+            string='example-name3.compute.amazonaws.com'
+            ;;
+        4)
+            string='example-name4.compute.amazonaws.com'
+            ;;
+        5)
+            string='example-name5.compute.amazonaws.com'
+            ;;
+    esac
+    ssh -i "my-ssh-key.pem" $string # replace my-ssh-key.pem with the name of your key
+fi
