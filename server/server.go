@@ -29,8 +29,8 @@ func handleConnection(c net.Conn) {
 		c.Write([]byte(string(counter)))
 	}
 	c.Close()
-
 }
+
 func main() {
 	arguments := os.Args
 	if len(arguments) == 1 {
