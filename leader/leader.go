@@ -107,10 +107,6 @@ func readAndSplit(directory string, numHosts int) *[][][]byte {
 		fmt.Println("chunk num:", i+1)
 
 		bytesRead, err := file.Read(buff) //read the length of buffer from file
-		if err == io.EOF {
-			fmt.Println("reached end of file, chunks read:", i)
-			break
-		}
 		if err != nil {
 			if err == io.EOF {
 				fmt.Println("reached end of file, chunks read:", i)
