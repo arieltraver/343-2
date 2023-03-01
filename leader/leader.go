@@ -35,6 +35,7 @@ func handleConnection(c net.Conn) {
 	c.Close()
 
 }
+
 func main() {
 	arguments := os.Args
 	if len(arguments) <= 1 {
@@ -44,6 +45,9 @@ func main() {
 
 	DIRECTORY := arguments[2]
 	fmt.Println("directory:", DIRECTORY)
+
+	readAndSplit(DIRECTORY, 10)
+
 	PORT := ":" + arguments[1]
 	listener, err := net.Listen("tcp4", PORT)
 	if err != nil {
@@ -68,22 +72,16 @@ func main() {
 	}
 }
 
-/**Reads a file into chunks and saves these chunks in memory
-	this is gross bc you are going to need to request stack space
-	parameters:
-		-- directory: directory to read a file from
-		-- numhosts: number of chunks
-	returns:
-		-- a 3d byte array. each host has one array of bytes, and one array which just contains status
-		-- necessary because go does not allow multi-type arrays
-		-- could replace with a struct but not now
+/** Reads a file into chunks and saves these chunks in memory.
+	this is gross bc you are going to need to request stack space.
+	Returns a 3d byte array. each host has one array of bytes, and one array which just contains status
 **/
-func splitAndSend(directory string, numHosts int) *[][][]byte {
+func readAndSplit(directory string, numHosts int) *[][][]byte {
 	fps, err := os.ReadDir(directory)
 	if err != nil {
 		log.Fatal(err)
 	}
-	file, err := os.Open(fps[0].Name())
+	file, err := os.Open(directory + "/" + fps[0].Name())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -95,7 +93,8 @@ func splitAndSend(directory string, numHosts int) *[][][]byte {
 	}
 	fileSize := fileInfo.Size() // get file size
 	chunkSize := int(fileSize) / numHosts //size of chunk per each host
-	//chunkSize += 1
+	fmt.Println("chunksize is", chunkSize)
+	fmt.Println("filesize is", fileSize)
 
 	buffers := make([][][]byte, numHosts)
 	for i := 0; i < numHosts; i++ {
@@ -109,12 +108,13 @@ func splitAndSend(directory string, numHosts int) *[][][]byte {
 
 	for i, pair := range(buffers) {
 		buffer := pair[1] //get the buffer, not the status
+		fmt.Println("length of buffer:", len(buffer))
 		bytesRead, err := file.Read(buffer) //read the length of buffer from file
 		if err != nil && err != io.EOF {
 			log.Fatal(err)
 		}
 		fmt.Println("bytes read:", bytesRead)
-		if err != io.EOF {
+		if err == io.EOF {
 			fmt.Println("reached end of file, chunks read:", i)
 			break;
 		}
