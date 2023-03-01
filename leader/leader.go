@@ -34,11 +34,13 @@ func handleConnection(c net.Conn) {
 }
 func main() {
 	arguments := os.Args
-	if len(arguments) == 1 {
-		fmt.Println("Please provide port number.")
+	if len(arguments) <= 1 {
+		fmt.Println("Usage: 'leader host directory'")
 		return
 	}
 
+	DIRECTORY := arguments[2]
+	fmt.Println("directory:", DIRECTORY)
 	PORT := ":" + arguments[1]
 	listener, err := net.Listen("tcp4", PORT)
 	if err != nil {
