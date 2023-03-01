@@ -43,11 +43,6 @@ func main() {
 		return
 	}
 
-	DIRECTORY := arguments[2]
-	fmt.Println("directory:", DIRECTORY)
-
-	readAndSplit(DIRECTORY, 10)
-
 	PORT := ":" + arguments[1]
 	listener, err := net.Listen("tcp4", PORT)
 	if err != nil {
@@ -58,7 +53,11 @@ func main() {
 
 	fmt.Println("listening on port", arguments[1])
 
-	for { // Endless loop because the server is constantly running
+	DIRECTORY := arguments[2]
+	fmt.Println("directory:", DIRECTORY)
+	readAndSplit(DIRECTORY, 10)
+
+	/* for { // Endless loop because the server is constantly running
 		//only stops if handleConnection() reads STOP
 		conn, err := listener.Accept()
 		if err != nil {
@@ -69,7 +68,7 @@ func main() {
 			go handleConnection(conn) // Each client served by a different goroutine
 			count++
 		}
-	}
+	} */
 }
 
 /*
@@ -94,35 +93,32 @@ func readAndSplit(directory string, numHosts int) *[][][]byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fileSize := fileInfo.Size()           // get file size
-	chunkSize := int(fileSize) / numHosts //size of chunk per each host
+	fileSize := fileInfo.Size()                                                 // get file size
+	chunkSize := int(math.Ceil(float64(float64(fileSize) / float64(numHosts)))) //size of chunk per each host
 	fmt.Println("chunksize is", chunkSize)
 	fmt.Println("filesize is", fileSize)
 
 	buffers := make([][][]byte, numHosts)
+	read := 0
 	for i := 0; i < numHosts; i++ {
 		partSize := int(math.Min(float64(chunkSize), float64(fileSize-int64(i*chunkSize))))
-		pair := make([][]byte, 2)
-		pair[0] = []byte{0}
 		buff := make([]byte, partSize)
-		pair[1] = buff
-		buffers[i] = pair //for each host, chunk and status
-	}
+		fmt.Println("length of buffer:", len(buff))
 
-	for i, pair := range buffers {
-		buffer := pair[1] //get the buffer, not the status
-		fmt.Println("length of buffer:", len(buffer))
-		bytesRead, err := file.Read(buffer) //read the length of buffer from file
-		if err != nil && err != io.EOF {
-			log.Fatal(err)
+		fmt.Println("chunk num:", i+1)
+		bytesRead, err := file.Read(buff) //read the length of buffer from file
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println("reached end of file, chunks read:", i)
+				break
+			} else {
+				log.Fatal(err)
+			}
 		}
+		read += bytesRead
 		fmt.Println("bytes read:", bytesRead)
-		if err == io.EOF {
-			fmt.Println("reached end of file, chunks read:", i)
-			break
-		}
+		fmt.Println("total bytes read:", read)
+		buffers[i] = [][]byte{{0}, buff}
 	}
-
 	return &buffers
-
 }
