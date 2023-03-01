@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
+	//"sync"
 	"io"
 	"math"
 )
@@ -68,7 +68,17 @@ func main() {
 	}
 }
 
-func splitAndSend(directory string, numHosts int) {
+/**Reads a file into chunks and saves these chunks in memory
+	this is gross bc you are going to need to request stack space
+	parameters:
+		-- directory: directory to read a file from
+		-- numhosts: number of chunks
+	returns:
+		-- a 3d byte array. each host has one array of bytes, and one array which just contains status
+		-- necessary because go does not allow multi-type arrays
+		-- could replace with a struct but not now
+**/
+func splitAndSend(directory string, numHosts int) *[][][]byte {
 	fps, err := os.ReadDir(directory)
 	if err != nil {
 		log.Fatal(err)
@@ -87,15 +97,19 @@ func splitAndSend(directory string, numHosts int) {
 	chunkSize := int(fileSize) / numHosts //size of chunk per each host
 	//chunkSize += 1
 
-	buffers := make([][]byte, numHosts)
+	buffers := make([][][]byte, numHosts)
 	for i := 0; i < numHosts; i++ {
 		partSize := int(math.Min(float64(chunkSize), float64(fileSize-int64(i*chunkSize))))
+		pair := make([][]byte, 2)
+		pair[0] = []byte {0}
 		buff := make([]byte, partSize)
-		buffers[i] = buff
+		pair[1] = buff
+		buffers[i] = pair //for each host, chunk and status
 	}
 
-	for i, buffer := range(buffers) {
-		bytesRead, err := file.Read(buffer)
+	for i, pair := range(buffers) {
+		buffer := pair[1] //get the buffer, not the status
+		bytesRead, err := file.Read(buffer) //read the length of buffer from file
 		if err != nil && err != io.EOF {
 			log.Fatal(err)
 		}
@@ -106,5 +120,6 @@ func splitAndSend(directory string, numHosts int) {
 		}
 	}
 
+	return &buffers
 
 }
