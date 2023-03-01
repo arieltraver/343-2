@@ -22,6 +22,7 @@ func handleConnection(c net.Conn) {
 		fmt.Print(string(netData))
 		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
 		if temp == "STOP" {
+			count--
 			break
 		}
 		counter := strconv.Itoa(count) + "\n"
