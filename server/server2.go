@@ -12,6 +12,25 @@ import (
 
 var count = 0
 
+func inputLoop(conns []net.Conn, msg *chan string) {
+	await msg.close()
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		s := scanner.Text()
+		msg <- s
+		if strings.TrimWhiteSpace(strings.ToUpper(s)) == "DONE" {
+			fmt.Println("goodbye!")
+			return
+		}
+	}
+	if err := scanner.Err() ; err != nil {
+		close(msg)	
+		log.Fatal(err)
+	}
+}
+
+func outputLoop()
+
 func handleConnection(c net.Conn) {
 	for {
 		netData, err := bufio.NewReader(c).ReadString('\n')
@@ -22,7 +41,6 @@ func handleConnection(c net.Conn) {
 		fmt.Print(string(netData))
 		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
 		if temp == "STOP" {
-			count--
 			break
 		}
 		counter := strconv.Itoa(count) + "\n"
@@ -30,8 +48,8 @@ func handleConnection(c net.Conn) {
 
 	}
 	c.Close()
-}
 
+}
 func main() {
 	arguments := os.Args
 	if len(arguments) == 1 {
@@ -48,6 +66,8 @@ func main() {
 	defer listener.Close()
 
 	fmt.Println("listening on port", arguments[1])
+
+	conns chan 
 
 	for { // Endless loop because the server is constantly running
 		//only stops if handleConnection() reads STOP
