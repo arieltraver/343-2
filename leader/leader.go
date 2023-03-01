@@ -50,14 +50,13 @@ func main() {
 		return
 	}
 	defer listener.Close()
-
 	fmt.Println("listening on port", arguments[1])
 
 	DIRECTORY := arguments[2]
 	fmt.Println("directory:", DIRECTORY)
 	readAndSplit(DIRECTORY, 10)
 
-	/* for { // Endless loop because the server is constantly running
+	for { // Endless loop because the server is constantly running
 		//only stops if handleConnection() reads STOP
 		conn, err := listener.Accept()
 		if err != nil {
@@ -68,7 +67,7 @@ func main() {
 			go handleConnection(conn) // Each client served by a different goroutine
 			count++
 		}
-	} */
+	}
 }
 
 /*
@@ -109,7 +108,7 @@ func readAndSplit(directory string, numHosts int) *[][][]byte {
 		bytesRead, err := file.Read(buff) //read the length of buffer from file
 		if err != nil {
 			if err == io.EOF {
-				fmt.Println("reached end of file, chunks read:", i)
+				fmt.Println("reached end of file, chunks read:", i+1)
 				break
 			} else {
 				log.Fatal(err)
