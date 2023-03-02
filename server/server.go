@@ -30,8 +30,8 @@ func handleConnection(c net.Conn) {
 
 	}
 	c.Close()
-
 }
+
 func main() {
 	arguments := os.Args
 	if len(arguments) == 1 {
