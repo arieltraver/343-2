@@ -99,12 +99,12 @@ func waitForAllWorkers(globalCount *LockedInt) {
 	}
 }
 
-func grabMoreText(chunksize int, file *File, alldone *chan string) []byte, error {
+func grabMoreText(chunkSize int, file *os.File, alldone *chan string) ([]byte, error) {
 	buff := make([]byte, chunkSize)
 	bytesRead, err := file.Read(buff) //read the length of buffer from file
 	if err != nil {
 		if err == io.EOF {
-			allDone <- "done"
+			*alldone <- "done"
 			fmt.Println("reached end of file, chunks read:", i+1)
 			return nil, nil
 		} else {
@@ -189,12 +189,10 @@ func main() {
 
 	var wait sync.WaitGroup //wait on all hosts to complete
 	allgood := make(chan int, 1)
-	systemsGo := make(chan int, 1)
 
 	for { // change to a select, change globalcount
 		select {
 		case <- allgood:
-			systemsGo <- 1
 			wait.Wait() //wait for all threads to finish
 			//save map to file here
 			return
@@ -207,6 +205,7 @@ func main() {
 				return
 			} else { //if one connection fails you can have more
 				fmt.Println("new host joining:", conn.RemoteAddr())
+				wait.Add(1) //add new routine to the waitgroup
 				go handleConnection(conn, globalMap, &wait, globalCount, &allgood) // Each client served by a different goroutine
 			}
 		}
@@ -236,48 +235,6 @@ func prepareReader(directory string, numHosts int) (int, *os.File) {
 	}
 	fileSize := fileInfo.Size() // get file size
 	chunkSize := int(fileSize) / numHosts + 1 //size of chunk per each host
-	fmt.Println("chunksize is", chunkSize)
-	return chunksize, file
-}
-
-func readAndSplit(directory string, numHosts int) *[][][]byte {
-	fps, err := os.ReadDir(directory)
-	if err != nil {
-		log.Fatal(err)
-	}
-	file, err := os.Open(directory + "/" + fps[0].Name())
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-	fileInfo, err := file.Stat() // get file stats
-	if err != nil {
-		log.Fatal(err)
-	}
-	fileSize := fileInfo.Size() // get file size
-	chunkSize := int(fileSize) / numHosts + 1 //size of chunk per each host
-	fmt.Println("chunksize is", chunkSize)
-
-	buffers := make([][][]byte, numHosts)
-
-	for i := 0; i < numHosts; i++ {
-		//partSize := int(math.Min(float64(chunkSize), float64(fileSize-int64(i*chunkSize))))
-		buff := make([]byte, chunkSize)
-		fmt.Println("length of buffer:", len(buff))
-		fmt.Println("chunk num:", i+1)
-
-		bytesRead, err := file.Read(buff) //read the length of buffer from file
-		if err != nil {
-			if err == io.EOF {
-				fmt.Println("reached end of file, chunks read:", i+1)
-				break
-			} else {
-				log.Fatal(err)
-			}
-		}
-		fmt.Println("bytes read:", bytesRead)
-		buffers[i] = [][]byte{{0}, buff}
-	}
-	return &buffers
+	fmt.Println("chunk size is", chunkSize)
+	return chunkSize, file
 }
