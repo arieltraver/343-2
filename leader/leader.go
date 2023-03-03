@@ -2,15 +2,15 @@ package main
 
 import (
 	"bufio"
+	"time"
 	"fmt"
 	"log"
 	"net"
 	"os"
-	//"strconv"
+	"strconv"
 	"strings"
 	"sync"
 	"io"
-	"time"
 	//"math"
 )
 
@@ -19,12 +19,6 @@ import (
 func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, allgood *chan int) {
 	defer wait.Done()
 	defer c.Close()
-	addToCount(globalCount, 1)
-	if checkCount(globalCount) >= 4 {
-		*allgood <- 1
-	}
-
-	waitForAllWorkers(globalCount);
 	ready := make(chan string)
 	//first: for loop waits around for a 'ready' --DONE
 	//next: if it gets a ready, check if any chunks need processing
@@ -43,6 +37,7 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 				log.Fatal(err)
 			} else if bytes == nil && err == nil {
 				fmt.Fprint(c, "done")
+				*allgood <- 1 //let the main process know everybody is finished.
 				return
 			} else {
 				_, err := bufio.NewWriter(c).Write(bytes)
@@ -103,17 +98,6 @@ func sendJobName(c net.Conn) {
 	}
 }
 
-func waitForAllWorkers(globalCount *LockedInt) {
-	for {
-		if (checkCount(globalCount)) > 4 {
-			fmt.Println("all workers connected")
-			return
-		} else {
-			time.Sleep(1)
-		}
-	}
-}
-
 func grabMoreText(globalFile *LockedFile) ([]byte, error) {
 	globalFile.lock.Lock()
 	file := globalFile.file
@@ -139,16 +123,19 @@ type LockedMap struct {
 	lock sync.Mutex
 }
 
+//a locked int to keep track of how many workers are connected
 type LockedInt struct {
 	count int
 	lock sync.Mutex
 }
+//a locked file, from which data will be sent to workers
 type LockedFile struct {
 	chunkSize int
 	file *os.File
 	lock sync.Mutex
 }
 
+//checks a locked int and returns the value
 func checkCount(globalCount *LockedInt) int {
 	globalCount.lock.Lock()
 	c := globalCount.count
@@ -209,7 +196,7 @@ func main() {
 		fmt.Println("Usage: 'leader host directory'")
 		return
 	}
-	numHosts := 4 //for this assignment
+	numChunks := 4 //for this assignment
 	PORT := ":" + arguments[1]
 	listener, err := net.Listen("tcp4", PORT)
 	if err != nil {
@@ -221,21 +208,28 @@ func main() {
 
 	directory := arguments[2]
 	fmt.Println("directory:", directory)
-	globalFile := prepareFile(directory, numHosts)
+	globalFile := prepareFile(directory, numChunks)
 	totalMap := make(map[string] int)
 	globalMap := &LockedMap{
 		wordMap: &totalMap,
 	}
+	//counts the number of threads
 	globalCount := &LockedInt{
 		count: 0,
 	}
-
+	//counts the number of finished writes
+	//when this hits 0, stop accepting new connections
+	
 	var wait sync.WaitGroup //wait on all hosts to complete
-	allgood := make(chan int, 4)
+	allgood := make(chan int, numChunks)
+	alldone := make(chan int, numChunks) //for use by the routine that is making new connections
+
+	//separate thread lets new listeners in
+	go waitOnConnections(listener, globalMap, globalCount, globalFile, &wait, &allgood, &alldone)
 
 	for { // change to a select, change globalcount
 		select {
-		case <- allgood:
+		case <- allgood: //blocks till everybody is done
 			wait.Wait() //wait for all threads to finish
 			globalMap.lock.Lock()
 			hashmap := globalMap.wordMap
@@ -243,9 +237,17 @@ func main() {
 			fmt.Println("all done folks")
 			globalMap.lock.Unlock()
 			return
+		}
+	}
+}
+
+func waitOnConnections(listener net.Listener, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, allgood *chan int, alldone *chan int) {
+	for {
+		select {
+		case <- *alldone: //we are finished with the overall task
+			return //dont accept new connections
 		default:
 			fmt.Println("workers connected:", checkCount(globalCount))
-			//Stops if handleConnection() reads STOP
 			conn, err := listener.Accept()
 			if err != nil {
 				log.Println("failed connection")
@@ -253,16 +255,16 @@ func main() {
 			} else { //if one connection fails you can have more
 				fmt.Println("new host joining:", conn.RemoteAddr())
 				wait.Add(1) //add new routine to the waitgroup
-				go handleConnection(conn, globalMap, globalCount, globalFile, &wait, &allgood) // Each client served by a different goroutine
+				go handleConnection(conn, globalMap, globalCount, globalFile, wait, allgood) // Each client served by a different routine
+				addToCount(globalCount, 1) //keep track of how many workers are connected
 			}
 		}
 	}
 }
 
-
 /* Creates a LockedFile struct from a directory with one file. Returns the LockedFile as well as the size of each chunk in bytes.
 */
-func prepareFile(directory string, numHosts int) *LockedFile {
+func prepareFile(directory string, numChunks int) *LockedFile {
 	fps, err := os.ReadDir(directory)
 	if err != nil {
 		log.Fatal(err)
@@ -278,7 +280,7 @@ func prepareFile(directory string, numHosts int) *LockedFile {
 		log.Fatal(err)
 	}
 	fileSize := fileInfo.Size() // get file size
-	chunkSize := int(fileSize) / numHosts + 1 //size of chunk per each host
+	chunkSize := int(fileSize) / numChunks + 1 //size of chunk per each host
 
 	lockFile := &LockedFile{chunkSize: chunkSize, file: file}
 	return lockFile
