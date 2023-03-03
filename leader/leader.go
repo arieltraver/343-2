@@ -14,7 +14,9 @@ import (
 	//"math"
 )
 
-func handleConnection(c net.Conn, globalMap *LockedMap, wait *sync.WaitGroup, globalCount *LockedInt, allgood *chan int) {
+/* Talks to a single remote worker.
+*/
+func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, allgood *chan int) {
 	defer wait.Done()
 	defer c.Close()
 	addToCount(globalCount, 1)
@@ -35,7 +37,20 @@ func handleConnection(c net.Conn, globalMap *LockedMap, wait *sync.WaitGroup, gl
 		select {
 		case <-ready:
 			sendJobName(c)
-			//check the global data structure here
+			bytes, err := grabMoreText(globalFile)
+			if err != nil {
+				c.Close()
+				log.Fatal(err)
+			} else if bytes == nil && err == nil {
+				fmt.Fprint(c, "done")
+				return
+			} else {
+				_, err := bufio.NewWriter(c).Write(bytes)
+				if err != nil {
+					c.Close()
+					log.Fatal(err)
+				}
+			}
 		default:
 			waitForReady(c, &ready)
 		}
@@ -99,30 +114,38 @@ func waitForAllWorkers(globalCount *LockedInt) {
 	}
 }
 
-func grabMoreText(chunkSize int, file *os.File, alldone *chan string) ([]byte, error) {
+func grabMoreText(globalFile *LockedFile) ([]byte, error) {
+	globalFile.lock.Lock()
+	file := globalFile.file
+	chunkSize := globalFile.chunkSize
 	buff := make([]byte, chunkSize)
 	bytesRead, err := file.Read(buff) //read the length of buffer from file
 	if err != nil {
 		if err == io.EOF {
-			*alldone <- "done"
-			fmt.Println("reached end of file, chunks read:", i+1)
+			fmt.Println("reached end of file")
 			return nil, nil
 		} else {
 			log.Fatal(err)
 		}
 	}
 	fmt.Println("bytes read:", bytesRead)
+	globalFile.lock.Unlock()
 	return buff, nil
 }
 
 //a locked map structure, for the global result
 type LockedMap struct {
-	wordMap map[string] int;
+	wordMap *map[string] int;
 	lock sync.Mutex
 }
 
 type LockedInt struct {
 	count int
+	lock sync.Mutex
+}
+type LockedFile struct {
+	chunkSize int
+	file *os.File
 	lock sync.Mutex
 }
 
@@ -142,21 +165,41 @@ func addToCount(globalCount *LockedInt, diff int) {
 //enter data into the global locked map structure
 func enterData(routineMap map[string]int, globalMap *LockedMap) {
 	globalMap.lock.Lock() //obtain the lock
+	words := *globalMap.wordMap
 	for word, count := range(routineMap) {
-		globalMap.wordMap[word] = globalMap.wordMap[word] + count
+		words[word] = words[word] + count
 	}
 	globalMap.lock.Unlock() //release the lock
 }
 
+func writeMapToFile(filename string, counts *map[string]int) error {
+	output, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("error creating output file")
+	}
+	defer output.Close() //make sure file closes before return.
+	writer := bufio.NewWriter(output)
+	total := 0
+	for key, count := range(*counts) {
+		str := key + " " + strconv.Itoa(count) + "\n"
+		_, err := writer.WriteString(str)
+		if err != nil {
+			return fmt.Errorf("error writing to output file")
+		}
+		writer.Flush()
+		total += 1
+	}
+	return nil
+}
+
 func main() {
 	
-	//perform the file chunk division --DONE
-	//create a global map data structure --DONE
-	//loop which waits for N hosts to connect
-	// --- N could be specified as a command line argument
-	// --- pass a pointer to the buffer array (with mutex) to each connection
-	// --- also need to pass a pointer to the global map (with mutex) to each connection
-	// use sync.waitgroup to wait for all threads to complete
+	//initialize a global file --DONE untested
+	//initialize a global hash map --DONE untested
+	//loop which waits for N hosts to connect -- DONE untested
+	// -- pass a pointer to the global locked file  --DONE unteseted
+	// --- also need to pass a pointer to the global map (with mutex) to each connection --DONE untested
+	// use sync.waitgroup to wait for all threads to complete --DONE untested
 	// once all threads are complete, write the global map to a file
 	// end
 
@@ -166,7 +209,7 @@ func main() {
 		fmt.Println("Usage: 'leader host directory'")
 		return
 	}
-
+	numHosts := 4 //for this assignment
 	PORT := ":" + arguments[1]
 	listener, err := net.Listen("tcp4", PORT)
 	if err != nil {
@@ -176,25 +219,29 @@ func main() {
 	defer listener.Close()
 	fmt.Println("listening on port", arguments[1])
 
-	DIRECTORY := arguments[2]
-	fmt.Println("directory:", DIRECTORY)
-	readAndSplit(DIRECTORY, 10)
+	directory := arguments[2]
+	fmt.Println("directory:", directory)
+	globalFile := prepareFile(directory, numHosts)
 	totalMap := make(map[string] int)
 	globalMap := &LockedMap{
-		wordMap: totalMap,
+		wordMap: &totalMap,
 	}
 	globalCount := &LockedInt{
 		count: 0,
 	}
 
 	var wait sync.WaitGroup //wait on all hosts to complete
-	allgood := make(chan int, 1)
+	allgood := make(chan int, 4)
 
 	for { // change to a select, change globalcount
 		select {
 		case <- allgood:
 			wait.Wait() //wait for all threads to finish
-			//save map to file here
+			globalMap.lock.Lock()
+			hashmap := globalMap.wordMap
+			writeMapToFile("output.txt", hashmap)
+			fmt.Println("all done folks")
+			globalMap.lock.Unlock()
 			return
 		default:
 			fmt.Println("workers connected:", checkCount(globalCount))
@@ -206,19 +253,16 @@ func main() {
 			} else { //if one connection fails you can have more
 				fmt.Println("new host joining:", conn.RemoteAddr())
 				wait.Add(1) //add new routine to the waitgroup
-				go handleConnection(conn, globalMap, &wait, globalCount, &allgood) // Each client served by a different goroutine
+				go handleConnection(conn, globalMap, globalCount, globalFile, &wait, &allgood) // Each client served by a different goroutine
 			}
 		}
 	}
 }
 
-/*
-  - Reads a file into chunks and saves these chunks in memory.
-    this is gross bc you are going to need to request stack space.
-    Returns a 3d byte array. each host has one array of bytes, and one array which just contains status
-*/
 
-func prepareReader(directory string, numHosts int) (int, *os.File) {
+/* Creates a LockedFile struct from a directory with one file. Returns the LockedFile as well as the size of each chunk in bytes.
+*/
+func prepareFile(directory string, numHosts int) *LockedFile {
 	fps, err := os.ReadDir(directory)
 	if err != nil {
 		log.Fatal(err)
@@ -235,6 +279,7 @@ func prepareReader(directory string, numHosts int) (int, *os.File) {
 	}
 	fileSize := fileInfo.Size() // get file size
 	chunkSize := int(fileSize) / numHosts + 1 //size of chunk per each host
-	fmt.Println("chunk size is", chunkSize)
-	return chunkSize, file
+
+	lockFile := &LockedFile{chunkSize: chunkSize, file: file}
+	return lockFile
 }
