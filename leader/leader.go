@@ -6,10 +6,10 @@ import (
 	"log"
 	"net"
 	"os"
+	"io"
 	"strconv"
 	"strings"
 	"sync"
-	"io"
 	//"math"
 )
 
@@ -18,17 +18,18 @@ import (
 func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, allgood *chan int) {
 	defer wait.Done()
 	defer c.Close()
-	ready := make(chan string)
-	//first: for loop waits around for a 'ready' --DONE
-	//next: if it gets a ready, check if any chunks need processing
-	//		if not, tell worker 'done' and close
-	//next: for loop performs the handshake
-	//next: for loop waits around for a string to be written by the worker
-	//next: interpret the string (bufio readlines could be useful)
+	ready := make(chan string, 2)
+	//first: for loop waits around for a 'ready' --DONE untested
+	//next: if it gets a ready, check if any chunks need processing --DONE untested
+	//		if not, tell worker 'done' and close --DONE untested
+	//next: for loop performs the handshake --DONE untested
+	//next: for loop waits around for a string to be written by the worker --DONE untested
 	//next: write the string into the global data structure
 	for {
+		fmt.Println("looping")
 		select {
 		case <-ready:
+			fmt.Println("Sending job name!")
 			sendJobName(c)
 			bytes, err := grabMoreText(globalFile)
 			if err != nil {
@@ -46,19 +47,19 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 				}
 			}
 		default:
-			waitForReady(c, &ready)
+			waitForReady(c, ready)
 		}
 	}
 }
 
-func waitForReady(c net.Conn, ready *chan string) {
+func waitForReady(c net.Conn, ready chan string) {
 	for {
 		netData, err := bufio.NewReader(c).ReadString('\n') 
 		if err != nil {
 			c.Close()
 			log.Fatal("Reading input has failed...")
 		}
-		fmt.Print(string(netData))
+		fmt.Println(string(netData))
 		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
 		if temp == "STOP" {
 			c.Close()
@@ -66,7 +67,7 @@ func waitForReady(c net.Conn, ready *chan string) {
 		}
 		if temp == "READY" {
 			fmt.Println("A worker is ready!")
-			*ready <- "ready"
+			ready <- "ready"
 			return
 		}
 	}
@@ -74,7 +75,7 @@ func waitForReady(c net.Conn, ready *chan string) {
 
 func sendJobName(c net.Conn) {
 	for {
-		_, err := bufio.NewWriter(c).WriteString("map words")
+		_, err := io.WriteString(c, "map words")
 		if err != nil {
 			c.Close()
 			log.Fatal("Writing to worker has failed")
