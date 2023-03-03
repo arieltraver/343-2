@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"time"
 	"fmt"
 	"log"
 	"net"
@@ -193,7 +192,7 @@ func main() {
 	
 	arguments := os.Args
 	if len(arguments) <= 1 {
-		fmt.Println("Usage: 'leader host directory'")
+		fmt.Println("Usage: 'leader port directory'")
 		return
 	}
 	numChunks := 4 //for this assignment
