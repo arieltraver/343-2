@@ -6,10 +6,11 @@ import (
 	"log"
 	"net"
 	"os"
-	"strconv"
+	//"strconv"
 	"strings"
 	"sync"
 	"io"
+	"time"
 	//"math"
 )
 
@@ -22,36 +23,82 @@ func handleConnection(c net.Conn, globalMap *LockedMap, wait *sync.WaitGroup, gl
 	if checkCount(globalCount) >= 4 {
 		*allgood <- 1
 	}
-	//first: for loop waits around for a 'ready'
+
+	waitForAllWorkers(globalCount);
+	ready := make(chan string)
+	//first: for loop waits around for a 'ready' --DONE
 	//next: if it gets a ready, check if any chunks need processing
 	//		if not, tell worker 'done' and close
 	//next: for loop performs the handshake
 	//next: for loop waits around for a string to be written by the worker
 	//next: interpret the string (bufio readlines could be useful)
 	//next: write the string into the global data structure
-
-
 	for {
 		select {
-		case <-*allgood:
-			//send 'ready' to the host.
-		default: //wait around and chill while the host waits for everybody to connect
-			netData, err := bufio.NewReader(c).ReadString('\n') 
-			if err != nil {
-			log.Println(err) //prints to standard error
-			return
-			}
-			fmt.Print(string(netData))
-			temp := strings.TrimSpace(strings.ToUpper(string(netData)))
-			if temp == "STOP" {
-				count--
-				break
-			}
-			counter := strconv.Itoa(count) + "\n"
-			fmt.Fprintf(c, counter) //send counter
+		case <-ready:
+			fmt.Println("ready")
+			//do something here
+		default:
+			waitForReady(c, &ready)
 		}
 	}
+}
 
+func waitForReady(c net.Conn, ready *chan string) {
+	for {
+		netData, err := bufio.NewReader(c).ReadString('\n') 
+		if err != nil {
+			c.Close()
+			log.Fatal("Reading input has failed...")
+		}
+		fmt.Print(string(netData))
+		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
+		if temp == "STOP" {
+			c.Close()
+			log.Fatal("A worker has requested to STOP!")
+		}
+		if temp == "READY" {
+			fmt.Println("A worker is ready!")
+			*ready <- "ready"
+			return
+		}
+	}
+}
+
+func sendJobName(c net.Conn) {
+	for {
+		_, err := bufio.NewWriter(c).WriteString("map words")
+		if err != nil {
+			c.Close()
+			log.Fatal("Writing to worker has failed")
+		}
+		netData, err := bufio.NewReader(c).ReadString('\n')
+		if err != nil {
+			c.Close()
+			log.Fatal("Reading input has failed...")
+		}
+		fmt.Print(string(netData))
+		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
+		if temp == "STOP" {
+			c.Close()
+			log.Fatal("A worker has requested to STOP!")
+		}
+		if temp == "ok count words" {
+			fmt.Println("Worker is okay with counting words!")
+			return
+		}
+	}
+}
+
+func waitForAllWorkers(globalCount *LockedInt) {
+	for {
+		if (checkCount(globalCount)) > 4 {
+			fmt.Println("all workers connected")
+			return
+		} else {
+			time.Sleep(1)
+		}
+	}
 }
 
 //a locked map structure, for the global result
@@ -128,11 +175,15 @@ func main() {
 
 	var wait sync.WaitGroup //wait on all hosts to complete
 	allgood := make(chan int, 1)
+	systemsGo := make(chan int, 1)
 
 	for { // change to a select, change globalcount
 		select {
 		case <- allgood:
-			//perform the handshake, progress to the next stage
+			systemsGo <- 1
+			wait.Wait() //wait for all threads to finish
+			//save map to file here
+			return
 		default:
 			fmt.Println("workers connected:", checkCount(globalCount))
 			//Stops if handleConnection() reads STOP
