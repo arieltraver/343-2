@@ -14,8 +14,6 @@ import (
 	//"math"
 )
 
-var count = 0
-
 func handleConnection(c net.Conn, globalMap *LockedMap, wait *sync.WaitGroup, globalCount *LockedInt, allgood *chan int) {
 	defer wait.Done()
 	defer c.Close()
@@ -36,8 +34,8 @@ func handleConnection(c net.Conn, globalMap *LockedMap, wait *sync.WaitGroup, gl
 	for {
 		select {
 		case <-ready:
-			fmt.Println("ready")
-			//do something here
+			sendJobName(c)
+			//check the global data structure here
 		default:
 			waitForReady(c, &ready)
 		}
@@ -99,6 +97,22 @@ func waitForAllWorkers(globalCount *LockedInt) {
 			time.Sleep(1)
 		}
 	}
+}
+
+func grabMoreText(chunksize int, file *File, alldone *chan string) []byte, error {
+	buff := make([]byte, chunkSize)
+	bytesRead, err := file.Read(buff) //read the length of buffer from file
+	if err != nil {
+		if err == io.EOF {
+			allDone <- "done"
+			fmt.Println("reached end of file, chunks read:", i+1)
+			return nil, nil
+		} else {
+			log.Fatal(err)
+		}
+	}
+	fmt.Println("bytes read:", bytesRead)
+	return buff, nil
 }
 
 //a locked map structure, for the global result
@@ -204,6 +218,28 @@ func main() {
     this is gross bc you are going to need to request stack space.
     Returns a 3d byte array. each host has one array of bytes, and one array which just contains status
 */
+
+func prepareReader(directory string, numHosts int) (int, *os.File) {
+	fps, err := os.ReadDir(directory)
+	if err != nil {
+		log.Fatal(err)
+	}
+	file, err := os.Open(directory + "/" + fps[0].Name())
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat() // get file stats
+	if err != nil {
+		log.Fatal(err)
+	}
+	fileSize := fileInfo.Size() // get file size
+	chunkSize := int(fileSize) / numHosts + 1 //size of chunk per each host
+	fmt.Println("chunksize is", chunkSize)
+	return chunksize, file
+}
+
 func readAndSplit(directory string, numHosts int) *[][][]byte {
 	fps, err := os.ReadDir(directory)
 	if err != nil {
