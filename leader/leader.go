@@ -26,7 +26,6 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 	//next: for loop waits around for a string to be written by the worker --DONE untested
 	//next: write the string into the global data structure
 	for {
-		fmt.Println("looping")
 		select {
 		case <-ready:
 			fmt.Println("Sending job name!")
