@@ -10,17 +10,36 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	//"math"
 )
 
-type SafeMap struct {
-	freqMap map[string]int
-	m       *sync.RWMutex
+type Job struct {
+	Id int
+	Wg *sync.WaitGroup
+}
+type Leader struct {
+	freqMap   map[string]int
+	m         *sync.RWMutex
+	jobQueue  chan Job      // Production Line
+	readyPool chan chan Job // Channel of worker channels
 }
 
 var count = 0
 
+func (l *Leader) dispatch() {
+	for {
+		select {
+		case job := <-l.jobQueue: // chunk to process
+			workerChannel := <-l.readyPool // worker X's channel
+			workerChannel <- "map"
+			workerChannel <- job // sending worker X a job
+		}
+	}
+}
+
 func handleConnection(c net.Conn) {
+
 	//first: for loop waits around for a 'ready'
 	//next: if it gets a ready, check if any chunks need processing
 	//		if not, tell worker 'done' and close
@@ -29,6 +48,7 @@ func handleConnection(c net.Conn) {
 	//next: interpret the string (bufio readlines could be useful)
 	//next: write the string into the global data structure
 
+	//var workQueue chan chan WorkRequest
 	for {
 		netData, err := bufio.NewReader(c).ReadString('\n')
 		if err != nil {
@@ -36,7 +56,7 @@ func handleConnection(c net.Conn) {
 			return
 		}
 		fmt.Print(string(netData))
-		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
+
 		if temp == "STOP" {
 			count--
 			break
@@ -46,11 +66,11 @@ func handleConnection(c net.Conn) {
 
 	}
 	c.Close()
-
 }
 
 func main() {
 
+	freq := SafeMap{freqMap: make(map[string]int), m: &sync.RWMutex{}}
 	//perform the file chunk division
 	//create a global map data structure
 	//loop which waits for N hosts to connect
