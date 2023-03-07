@@ -12,6 +12,35 @@ import (
 	"strings"
 )
 
+//sendReadies()
+//send "ready" every n tics to the server
+//every time ready is sent, check if a job or 'done' is received
+//if 'done' received, terminate
+//continue until job received
+//--> handshake()
+
+//handshake:
+//send 'ok word map', block until you receive a response.
+//--> awaitBytes()
+
+//awaitBytes:
+//block until you receive bytes
+//save them in local memory as a big string (or bytes array?)
+//--> wordcount()
+
+//wordcount()
+//use bufio.ReadStrings (or bytes? is there a byte reader?) to read the big string
+//use bufio split scanner to scan by word
+//turn word lowercase
+//save into hashmap
+//--> mapToString()
+
+//mapToString()
+//turn the hash map into a string
+//send the string to leader via net.conn (bufio.writeString?... etc)
+//-->sendReadies()
+
+
 func main() {
 	args := os.Args
 	if len(args) <= 1 {
@@ -50,6 +79,20 @@ func main() {
 		fmt.Print("->: " + msg)                       //print out the server's message
 	}
 }
+func sendReadies(c net.Conn) {
+	for {
+		_, err2 := io.WriteString(c, "ready") //send text to your connection
+		if err2 != nil {
+			log.Fatal(err2)
+		}
+		msg, err := bufio.NewReader(c).ReadString('\n') //read what the server sends you
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Print("->: " + msg)//print out the server's message
+
+	}
+}
 
 func waitForJobName(c net.Conn) {
 	for {
@@ -65,3 +108,5 @@ func waitForJobName(c net.Conn) {
 		}
 	}
 }
+
+func 

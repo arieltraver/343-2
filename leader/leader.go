@@ -14,7 +14,7 @@ import (
 )
 
 // Talks to a single remote worker.
-func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, allgood *chan int) {
+func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup) {
 	defer wait.Done()
 	defer c.Close()
 	ready := make(chan string, 2)
@@ -34,8 +34,10 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 				c.Close()
 				log.Fatal(err)
 			} else if bytes == nil && err == nil {
+				//there are no more chunks to be read. end this routine
+				//main waits on each of these to reach this point
+				//so it's important to stop making new connections once the file is complete
 				fmt.Fprint(c, "done")
-				*allgood <- 1 //let the main process know everybody is finished.
 				return
 			} else {
 				_, err := bufio.NewWriter(c).Write(bytes)
@@ -218,24 +220,20 @@ func main() {
 	}
 	
 	var wait sync.WaitGroup //wait on all hosts to complete
-	allgood := make(chan int, numChunks)
 	alldone := make(chan int, numChunks) //for use by the routine that is making new connections
 
 	//separate thread lets new listeners in
-	go waitOnConnections(listener, globalMap, globalCount, globalFile, &wait, &allgood, &alldone)
+	go waitOnConnections(listener, globalMap, globalCount, globalFile, &wait, &alldone)
 
-	for { // change to a select, change globalcount
-		select {
-		case <- allgood: //blocks till everybody is done
-			wait.Wait() //wait for all threads to finish
-			globalMap.lock.Lock()
-			hashmap := globalMap.wordMap
-			writeMapToFile("output.txt", hashmap)
-			fmt.Println("all done folks")
-			globalMap.lock.Unlock()
-			return
-		}
-	}
+	wait.Wait() //wait for all threads to finish
+
+	//write the global map to a file
+	globalMap.lock.Lock()
+	hashmap := globalMap.wordMap
+	writeMapToFile("output.txt", hashmap)
+	fmt.Println("all done folks")
+	globalMap.lock.Unlock()
+	return
 }
 
 /* waits for new connections on your port (specified by net.Listener)
@@ -245,7 +243,7 @@ this is more of an edge case since we will only be testing with four
 ---> logic: every time the for loop runs it sees if alldone has been filled yet
 ---> so if alldone is filled while it's waiting, then it technically could accept 1 more
 */
-func waitOnConnections(listener net.Listener, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, allgood *chan int, alldone *chan int) {
+func waitOnConnections(listener net.Listener, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, alldone *chan int) {
 	for {
 		select {
 		case <- *alldone: //we are finished with the overall task
@@ -259,7 +257,7 @@ func waitOnConnections(listener net.Listener, globalMap *LockedMap, globalCount 
 			} else { //if one connection fails you can have more
 				fmt.Println("new host joining:", conn.RemoteAddr())
 				wait.Add(1) //add new routine to the waitgroup
-				go handleConnection(conn, globalMap, globalCount, globalFile, wait, allgood) // Each client served by a different routine
+				go handleConnection(conn, globalMap, globalCount, globalFile, wait) // Each client served by a different routine
 				addToCount(globalCount, 1) //keep track of how many workers are connected
 			}
 		}
