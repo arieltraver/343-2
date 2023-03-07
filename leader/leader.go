@@ -13,8 +13,7 @@ import (
 	//"math"
 )
 
-/* Talks to a single remote worker.
-*/
+// Talks to a single remote worker.
 func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, allgood *chan int) {
 	defer wait.Done()
 	defer c.Close()
@@ -51,6 +50,7 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 	}
 }
 
+//waits around for a worker to send a "ready" signal
 func waitForReady(c net.Conn, ready chan string) {
 	for {
 		netData, err := bufio.NewReader(c).ReadString('\n') 
@@ -72,6 +72,7 @@ func waitForReady(c net.Conn, ready chan string) {
 	}
 }
 
+//sends a string reading "map words" to a worker connected via net.Conn
 func sendJobName(c net.Conn) {
 	for {
 		_, err := io.WriteString(c, "map words")
@@ -97,6 +98,7 @@ func sendJobName(c net.Conn) {
 	}
 }
 
+//Takes a locked file object and reads some bytes, returns the array 
 func grabMoreText(globalFile *LockedFile) ([]byte, error) {
 	globalFile.lock.Lock()
 	file := globalFile.file
@@ -121,7 +123,6 @@ type LockedMap struct {
 	wordMap *map[string] int;
 	lock sync.Mutex
 }
-
 //a locked int to keep track of how many workers are connected
 type LockedInt struct {
 	count int
@@ -165,7 +166,6 @@ func writeMapToFile(filename string, counts *map[string]int) error {
 	}
 	defer output.Close() //make sure file closes before return.
 	writer := bufio.NewWriter(output)
-	total := 0
 	for key, count := range(*counts) {
 		str := key + " " + strconv.Itoa(count) + "\n"
 		_, err := writer.WriteString(str)
@@ -173,7 +173,6 @@ func writeMapToFile(filename string, counts *map[string]int) error {
 			return fmt.Errorf("error writing to output file")
 		}
 		writer.Flush()
-		total += 1
 	}
 	return nil
 }
@@ -182,11 +181,11 @@ func main() {
 	
 	//initialize a global file --DONE untested
 	//initialize a global hash map --DONE untested
-	//loop which waits for N hosts to connect -- DONE untested
-	// -- pass a pointer to the global locked file  --DONE unteseted
-	// --- also need to pass a pointer to the global map (with mutex) to each connection --DONE untested
+	//loop which waits for new hosts to connect --DONE TEST
+	// -- pass a pointer to the global locked file  --DONE TESTED
+	// --- also need to pass a pointer to the global map (with mutex) to each connection --DONE TESTED
 	// use sync.waitgroup to wait for all threads to complete --DONE untested
-	// once all threads are complete, write the global map to a file
+	// once all threads are complete, write the global map to a file --DONE untested
 	// end
 
 	
@@ -207,17 +206,16 @@ func main() {
 
 	directory := arguments[2]
 	fmt.Println("directory:", directory)
-	globalFile := prepareFile(directory, numChunks)
-	totalMap := make(map[string] int)
-	globalMap := &LockedMap{
+	globalFile := prepareFile(directory, numChunks) //create a filepointer to the one file in there
+	totalMap := make(map[string] int) //to be filled
+	globalMap := &LockedMap{ //lock so one thread at a time may use it
 		wordMap: &totalMap,
 	}
-	//counts the number of threads
+	//is it better to do this or to use a channel of separate ones? uncertain...
+	//counts the number of workers online
 	globalCount := &LockedInt{
 		count: 0,
 	}
-	//counts the number of finished writes
-	//when this hits 0, stop accepting new connections
 	
 	var wait sync.WaitGroup //wait on all hosts to complete
 	allgood := make(chan int, numChunks)
@@ -240,6 +238,13 @@ func main() {
 	}
 }
 
+/* waits for new connections on your port (specified by net.Listener)
+ou can have as many workers as you want
+however, once alldone channel is filled, then it will only accept maximum 1 new connection*
+this is more of an edge case since we will only be testing with four
+---> logic: every time the for loop runs it sees if alldone has been filled yet
+---> so if alldone is filled while it's waiting, then it technically could accept 1 more
+*/
 func waitOnConnections(listener net.Listener, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, allgood *chan int, alldone *chan int) {
 	for {
 		select {
