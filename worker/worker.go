@@ -79,6 +79,7 @@ func main() {
 		fmt.Print("->: " + msg)                       //print out the server's message
 	}
 }
+
 func sendReadies(c net.Conn) {
 	for {
 		_, err2 := io.WriteString(c, "ready") //send text to your connection
@@ -89,8 +90,11 @@ func sendReadies(c net.Conn) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Print("->: " + msg)//print out the server's message
-
+		fmt.Println(msg)
+		if strings.TrimSpace(string(msg))== "map words" { //if the user enters stop...
+			fmt.Println("mapping words")
+			return
+		}
 	}
 }
 
@@ -109,4 +113,20 @@ func waitForJobName(c net.Conn) {
 	}
 }
 
-func 
+func okAwaitBytes(c net.Conn) []byte {
+	chunkLength := 100 //temp, replace with parameter
+	for { //do we need this or does it just block?
+		_, err := io.WriteString(c, "ok map words")
+		if err != nil {
+			c.Close()
+			log.Fatal(err)
+		}
+		bytes := make([]byte, chunkLength)
+		_, err2 := bufio.NewReader(c).Read(bytes) //read what the server sends you
+		if err2 != nil {
+			c.Close()
+			log.Fatal(err)
+		}
+		return bytes
+	}
+}
