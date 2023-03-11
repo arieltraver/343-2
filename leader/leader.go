@@ -211,7 +211,7 @@ func main() {
 
 	
 	arguments := os.Args
-	if len(arguments) <= 1 {
+	if len(arguments) <= 2 {
 		fmt.Println("Usage: 'leader port directory'")
 		return
 	}
@@ -241,15 +241,13 @@ func main() {
 	var wait sync.WaitGroup //wait on all hosts to complete
 	alldone := make(chan int, numChunks) //for use by the routine that is making new connections
 
-	//separate thread lets new listeners in
-	go waitOnConnections(listener, globalMap, globalCount, globalFile, &wait, &alldone)
+	waitOnConnections(listener, globalMap, globalCount, globalFile, &wait, &alldone)
 
 	wait.Wait() //wait for all threads to finish
 
 	//write the global map to a file
 	globalMap.lock.Lock()
-	hashmap := globalMap.wordMap
-	writeMapToFile("output.txt", hashmap)
+	writeMapToFile("output.txt", globalMap.wordMap)
 	fmt.Println("all done folks")
 	globalMap.lock.Unlock()
 	return
