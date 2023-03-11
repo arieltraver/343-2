@@ -13,9 +13,11 @@ import (
 	"bytes"
 	"regexp"
 	"strconv"
+	"time"
+	"math/rand"
 )
 
-//read the byte array sent from the leader
+//read the byte array sent from the leader and finds the frequency of each word.
 func wordcount(b []byte) map[string]int {
 	var nonLetter = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 	counts := make(map [string] int) //for the result
@@ -29,7 +31,7 @@ func wordcount(b []byte) map[string]int {
 		words := strings.Split(word, " ") //split words by char
 		for _, wd := range(words) {
 			wd2 := nonLetter.ReplaceAllString(wd, "") //get rid of spaces
-			counts[wd2] = counts[wd2] + 1 //increment word count in the dictionary
+			counts[wd2] += 1 //increment word count in the dictionary
 		}
 	}
 	return counts
@@ -40,15 +42,16 @@ func mapToString(counts map[string]int) *strings.Builder{
 	var b strings.Builder //minimize memory copying
 	for key, count := range(counts) {
 		b.WriteString(key)
-		b.WriteRune(' ')
+		b.WriteRune(':')
 		b.WriteString(strconv.Itoa(count))
-		b.WriteRune(',')
+		b.WriteRune(' ')
 	}
+	b.WriteRune('\n')
 	return &b
 }
 
 //takes a string builder and sends the string across c
-func sendString(c net.Conn, str *strings.Builder) {
+func sendString(c net.Conn, str *strings.Builder){
 	s := str.String() //get string from the builder object
 	_, err2 := io.WriteString(c, s) //send string. assuming chunk size selected to be sendable
 	if err2 != nil {
@@ -70,33 +73,23 @@ func main() {
 		log.Fatal(err)
 		return
 	}
-	fmt.Print("Welcome to the TCP client.\nType your message and hit enter.\nType STOP to stop.\n")
+	defer c.Close() //make sure it closes
 	for {
-		//read your own text
-		reader := bufio.NewReader(os.Stdin) //read input
-		fmt.Print(">>> ")
-		txt, err := reader.ReadString('\n') //take in text until the newline
-		if err != nil {
-			log.Fatal(err) //clientside logs are fatal, server not
-			return
+		sendReadies(c)
+		waitForJobName(c) //needs an error return condition tree
+		b := okAwaitBytes(c)
+		if b == nil {
+			return //this happens when we are all done.
 		}
-		if strings.TrimSpace(string(txt)) == "STOP" { //if the user enters stop...
-			fmt.Println("TCP client now exiting. Goodbye!")
-			return
-		}
-		_, err2 := io.WriteString(c, txt)                     //send text to your connection
-		if err2 != nil {
-			log.Fatal(err2)
-		}
-
-		msg, err := bufio.NewReader(c).ReadString('\n') //read what the server sends you
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Print("->: " + msg)                       //print out the server's message
+		m := wordcount(b)
+		s := mapToString(m)
+		sendString(c, s)
 	}
+
 }
 
+/*sends "ready" periodically to the leader
+randomly chooses how often to repeat the for loop*/
 func sendReadies(c net.Conn) {
 	for {
 		_, err2 := io.WriteString(c, "ready") //send text to your connection
@@ -112,9 +105,13 @@ func sendReadies(c net.Conn) {
 			fmt.Println("mapping words")
 			return
 		}
+		
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) //heartbeat
 	}
 }
 
+/*waits for the leader to send "map words"
+may want to try and make use of a timeout function */
 func waitForJobName(c net.Conn) {
 	for {
 		txt, err := bufio.NewReader(c).ReadString('\n')
@@ -130,20 +127,29 @@ func waitForJobName(c net.Conn) {
 	}
 }
 
+//send the "ok map words"
+//maybe want to include a timeout option
 func okAwaitBytes(c net.Conn) []byte {
 	chunkLength := 100 //temp, replace with parameter
-	for { //do we need this or does it just block?
-		_, err := io.WriteString(c, "ok map words")
-		if err != nil {
-			c.Close()
-			log.Fatal(err)
-		}
-		bytes := make([]byte, chunkLength)
-		_, err2 := bufio.NewReader(c).Read(bytes) //read what the server sends you
-		if err2 != nil {
-			c.Close()
-			log.Fatal(err)
-		}
-		return bytes
+	_, err := io.WriteString(c, "ok map words")
+	if err != nil {
+		c.Close()
+		log.Fatal(err)
 	}
+	bytes := make([]byte, chunkLength) //array of bytes
+	_, err2 := bufio.NewReader(c).Read(bytes) //read server's message into bytes array
+	if err2 != nil {
+		c.Close()
+		log.Fatal(err)
+	}
+	if strings.ToUpper(string(bytes[0:4])) == "DONE" {
+		fmt.Println("job is done!")
+		return nil
+	}
+	return bytes
 }
+
+
+///linking code
+///run "send readies" (loops)
+///run 

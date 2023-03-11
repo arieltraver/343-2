@@ -18,12 +18,6 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 	defer wait.Done()
 	defer c.Close()
 	ready := make(chan string, 2)
-	//first: for loop waits around for a 'ready' --DONE untested
-	//next: if it gets a ready, check if any chunks need processing --DONE untested
-	//		if not, tell worker 'done' and close --DONE untested
-	//next: for loop performs the handshake --DONE untested
-	//next: for loop waits around for a string to be written by the worker --DONE untested
-	//next: write the string into the global data structure
 	for {
 		select {
 		case <-ready:
@@ -74,7 +68,7 @@ func waitForReady(c net.Conn, ready chan string) {
 	}
 }
 
-//sends a string reading "map words" to a worker connected via net.Conn
+/*sends a string reading "map words" to a worker connected via net.Conn*/
 func sendJobName(c net.Conn) {
 	for {
 		_, err := io.WriteString(c, "map words")
@@ -100,7 +94,31 @@ func sendJobName(c net.Conn) {
 	}
 }
 
-//Takes a locked file object and reads some bytes, returns the array 
+func addResultToGlobal(c net.Conn, globalMap *LockedMap) {
+	netData, err := bufio.NewReader(c).ReadString('\n') //read into a string til the return
+	if err != nil {
+		c.Close()
+		log.Fatal(err)
+	}
+	str := strings.NewReader(netData)
+	scanner := bufio.NewScanner(str) //init scanner to parse worker string
+	scanner.Split(bufio.ScanWords) //word:count divided by spaces
+	globalMap.lock.Lock() //acquire lock
+	for scanner.Scan() {
+		wdcount := scanner.Text()
+		wdAndCount := strings.Split(wdcount, ":")
+		word := wdAndCount[0]
+		count, err := strconv.Atoi(wdAndCount[1]) //format is "word:count word2:count2"
+		if err != nil {
+			c.Close()
+			log.Fatal(err)
+		}
+		globalMap.wordMap[word] = globalMap.wordMap[word] + count //add to the global map
+	}
+	globalMap.lock.Unlock() //release lock
+}
+
+/*Takes a locked file object and reads some bytes, returns the array*/
 func grabMoreText(globalFile *LockedFile) ([]byte, error) {
 	globalFile.lock.Lock()
 	file := globalFile.file
@@ -122,7 +140,7 @@ func grabMoreText(globalFile *LockedFile) ([]byte, error) {
 
 //a locked map structure, for the global result
 type LockedMap struct {
-	wordMap *map[string] int;
+	wordMap map[string] int;
 	lock sync.Mutex
 }
 //a locked int to keep track of how many workers are connected
@@ -154,21 +172,22 @@ func addToCount(globalCount *LockedInt, diff int) {
 //enter data into the global locked map structure
 func enterData(routineMap map[string]int, globalMap *LockedMap) {
 	globalMap.lock.Lock() //obtain the lock
-	words := *globalMap.wordMap
+	words := globalMap.wordMap
 	for word, count := range(routineMap) {
 		words[word] = words[word] + count
 	}
 	globalMap.lock.Unlock() //release the lock
 }
 
-func writeMapToFile(filename string, counts *map[string]int) error {
+// Writes the final word count results to an output file.
+func writeMapToFile(filename string, counts map[string]int) error {
 	output, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("error creating output file")
 	}
 	defer output.Close() //make sure file closes before return.
 	writer := bufio.NewWriter(output)
-	for key, count := range(*counts) {
+	for key, count := range(counts) {
 		str := key + " " + strconv.Itoa(count) + "\n"
 		_, err := writer.WriteString(str)
 		if err != nil {
@@ -211,7 +230,7 @@ func main() {
 	globalFile := prepareFile(directory, numChunks) //create a filepointer to the one file in there
 	totalMap := make(map[string] int) //to be filled
 	globalMap := &LockedMap{ //lock so one thread at a time may use it
-		wordMap: &totalMap,
+		wordMap: totalMap,
 	}
 	//is it better to do this or to use a channel of separate ones? uncertain...
 	//counts the number of workers online
@@ -284,6 +303,6 @@ func prepareFile(directory string, numChunks int) *LockedFile {
 	fileSize := fileInfo.Size() // get file size
 	chunkSize := int(fileSize) / numChunks + 1 //size of chunk per each host
 
-	lockFile := &LockedFile{chunkSize: chunkSize, file: file}
-	return lockFile
+	lockedFile := &LockedFile{chunkSize: chunkSize, file: file}
+	return lockedFile
 }
