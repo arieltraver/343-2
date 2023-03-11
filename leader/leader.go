@@ -21,7 +21,6 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 	for {
 		select {
 		case <-ready:
-			fmt.Println("Sending job name!")
 			sendJobName(c)
 			bytes, err := grabMoreText(globalFile)
 			if err != nil {
@@ -48,6 +47,7 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 
 //waits around for a worker to send a "ready" signal
 func waitForReady(c net.Conn, ready chan string) {
+	fmt.Println("waiting for ready")
 	for {
 		netData, err := bufio.NewReader(c).ReadString('\n') 
 		if err != nil {
@@ -70,27 +70,27 @@ func waitForReady(c net.Conn, ready chan string) {
 
 /*sends a string reading "map words" to a worker connected via net.Conn*/
 func sendJobName(c net.Conn) {
-	for {
-		_, err := io.WriteString(c, "map words")
-		if err != nil {
-			c.Close()
-			log.Fatal("Writing to worker has failed")
-		}
-		netData, err := bufio.NewReader(c).ReadString('\n')
-		if err != nil {
-			c.Close()
-			log.Fatal("Reading input has failed...")
-		}
-		fmt.Print(string(netData))
-		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
-		if temp == "STOP" {
-			c.Close()
-			log.Fatal("A worker has requested to STOP!")
-		}
-		if temp == "ok count words" {
-			fmt.Println("Worker is okay with counting words!")
-			return
-		}
+	fmt.Println("sending job name!")
+	s := "count words\n"
+	_, err := io.WriteString(c, s)
+	if err != nil {
+		c.Close()
+		log.Fatal("Writing to worker has failed")
+	}
+	netData, err := bufio.NewReader(c).ReadString('\n')
+	if err != nil {
+		c.Close()
+		log.Fatal(err)
+	}
+	fmt.Print(string(netData))
+	temp := strings.TrimSpace(strings.ToUpper(string(netData)))
+	if temp == "STOP" {
+		c.Close()
+		log.Fatal("A worker has requested to STOP!")
+	}
+	if temp == "ok count words" {
+		fmt.Println("Worker is okay with counting words!")
+		return
 	}
 }
 
@@ -113,7 +113,7 @@ func addResultToGlobal(c net.Conn, globalMap *LockedMap) {
 			c.Close()
 			log.Fatal(err)
 		}
-		globalMap.wordMap[word] = globalMap.wordMap[word] + count //add to the global map
+		globalMap.wordMap[word] += count //add to the global map
 	}
 	globalMap.lock.Unlock() //release lock
 }
@@ -292,7 +292,6 @@ func prepareFile(directory string, numChunks int) *LockedFile {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close()
 
 	fileInfo, err := file.Stat() // get file stats
 	if err != nil {

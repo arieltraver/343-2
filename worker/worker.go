@@ -13,14 +13,15 @@ import (
 	"bytes"
 	"regexp"
 	"strconv"
-	"time"
-	"math/rand"
+	//"time"
+	//"math/rand"
 )
 
 //read the byte array sent from the leader and finds the frequency of each word.
 func wordcount(b []byte) map[string]int {
+	fmt.Println("mapping words")
 	var nonLetter = regexp.MustCompile(`[^a-zA-Z0-9]+`)
-	counts := make(map [string] int) //for the result
+	counts := make(map[string] int) //for the result
 	byteReader := bytes.NewReader(b) //reader class for byte array
 	scanner := bufio.NewScanner(byteReader) //buffered i/o: creates a pipe for reading
 	scanner.Split(bufio.ScanWords) //break reading pattern into words
@@ -75,6 +76,7 @@ func main() {
 	}
 	defer c.Close() //make sure it closes
 	for {
+		fmt.Println("sending ready") 
 		sendReadies(c)
 		waitForJobName(c) //needs an error return condition tree
 		b := okAwaitBytes(c)
@@ -91,39 +93,23 @@ func main() {
 /*sends "ready" periodically to the leader
 randomly chooses how often to repeat the for loop*/
 func sendReadies(c net.Conn) {
-	for {
-		_, err2 := io.WriteString(c, "ready") //send text to your connection
-		if err2 != nil {
-			log.Fatal(err2)
-		}
-		msg, err := bufio.NewReader(c).ReadString('\n') //read what the server sends you
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(msg)
-		if strings.TrimSpace(string(msg))== "map words" { //if the user enters stop...
-			fmt.Println("mapping words")
-			return
-		}
-		
-		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) //heartbeat
+	_, err2 := io.WriteString(c, "ready\n") //send text to your connection
+	if err2 != nil {
+		log.Fatal(err2)
 	}
 }
 
 /*waits for the leader to send "map words"
 may want to try and make use of a timeout function */
 func waitForJobName(c net.Conn) {
-	for {
-		txt, err := bufio.NewReader(c).ReadString('\n')
-		if err != nil {
-			c.Close()
-			log.Fatal(err)
-		}
-		fmt.Println(txt)
-		if txt == "count words" {
-			fmt.Println("received order to count words!")
-			return
-		}
+	txt, err := bufio.NewReader(c).ReadString('\n')
+	if err != nil {
+		c.Close()
+		log.Fatal(err)
+	}
+	if strings.Trim(txt, " \n") == "count words" { //c had random stuff for whatever reason
+		fmt.Println("received order to count words!")
+		return
 	}
 }
 
@@ -131,7 +117,7 @@ func waitForJobName(c net.Conn) {
 //maybe want to include a timeout option
 func okAwaitBytes(c net.Conn) []byte {
 	chunkLength := 100 //temp, replace with parameter
-	_, err := io.WriteString(c, "ok map words")
+	_, err := io.WriteString(c, "ok count words\n")
 	if err != nil {
 		c.Close()
 		log.Fatal(err)
