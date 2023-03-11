@@ -1,57 +1,67 @@
+//used tutorial here: https://www.linode.com/docs/guides/developing-udp-and-tcp-clients-and-servers-in-go/
+
 package main
 
 import (
+	"bufio"
 	"fmt"
-	"sync"
-	//"time"
-	//"math"
+	"io"
+	"log"
+	"net"
+	"os"
+	"strings"
 )
 
-type SafeMap struct {
-	freqMap map[string]int
-	m       *sync.RWMutex
-}
-
-type Job struct {
-	Id int
-	Wg *sync.WaitGroup
-}
-
-type Worker struct {
-	ID          int
-	Work        chan string
-	WorkerQueue chan chan string
-	QuitChan    chan bool
-}
-
-func (w *Worker) Start() {
-	go func() {
-		for {
-			// Add ourselves into the worker queue.
-			w.WorkerQueue <- w.Work
-
-			select {
-			case work := <-w.Work: // Leader sent a work request
-				fmt.Printf("worker %d received work request", w.ID)
-
-				if work == "map" {
-					w.Work <- "ok map" // send confirmation of "map" keyword to leader
-				}
-
-				chunk := w.Work
-				results := countWords(chunk)
-				w.Work <- results
-
-			case <-w.QuitChan: // no more chunks
-				// TODO: all workers stop
-				fmt.Printf("worker%d stopping\n", w.ID)
-				return
-			}
+func main() {
+	args := os.Args
+	if len(args) <= 1 {
+		log.Fatal("please provide host:port to connect to")
+		return
+	}
+	conn := args[1]
+	c, err := net.Dial("tcp", conn) //connect to host:port
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	fmt.Print("Welcome to the TCP client.\nType your message and hit enter.\nType STOP to stop.\n")
+	for {
+		//read your own text
+		reader := bufio.NewReader(os.Stdin) //read input
+		fmt.Print(">>> ")
+		txt, err := reader.ReadString('\n') //take in text until the newline
+		if err != nil {
+			log.Fatal(err) //clientside logs are fatal, server not
+			return
 		}
-	}()
+		if strings.TrimSpace(string(txt)) == "STOP" { //if the user enters stop...
+			fmt.Println("TCP client now exiting. Goodbye!")
+			return
+		}
+		_, err2 := io.WriteString(c, txt) //send text to your connection
+		if err2 != nil {
+			log.Fatal(err2)
+		}
+
+		msg, err := bufio.NewReader(c).ReadString('\n') //read what the server sends you
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Print("->: " + msg) //print out the server's message
+	}
 }
 
-func countWords(chunk chan string) *SafeMap {
-	// TODO
-	return &SafeMap{}
+func waitForJobName(c net.Conn) {
+	for {
+		txt, err := bufio.NewReader(c).ReadString('\n')
+		if err != nil {
+			c.Close()
+			log.Fatal(err)
+		}
+		fmt.Println(txt)
+		if txt == "count words" {
+			fmt.Println("received order to count words!")
+			return
+		}
+	}
 }
