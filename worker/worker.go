@@ -10,35 +10,52 @@ import (
 	"os"
 	"io"
 	"strings"
+	"bytes"
+	"regexp"
+	"strconv"
 )
 
-//sendReadies()
-//send "ready" every n tics to the server
-//every time ready is sent, check if a job or 'done' is received
-//if 'done' received, terminate
-//continue until job received
-//--> handshake()
+//read the byte array sent from the leader
+func wordcount(b []byte) map[string]int {
+	var nonLetter = regexp.MustCompile(`[^a-zA-Z0-9]+`)
+	counts := make(map [string] int) //for the result
+	byteReader := bytes.NewReader(b) //reader class for byte array
+	scanner := bufio.NewScanner(byteReader) //buffered i/o: creates a pipe for reading
+	scanner.Split(bufio.ScanWords) //break reading pattern into words
+	for scanner.Scan() { //reads until EOF OR until the limit
+		word := scanner.Text()
+		word = strings.ToLower(word) //lowercase-ify
+		word = nonLetter.ReplaceAllString(word, " ") //get rid of extra characters
+		words := strings.Split(word, " ") //split words by char
+		for _, wd := range(words) {
+			wd2 := nonLetter.ReplaceAllString(wd, "") //get rid of spaces
+			counts[wd2] = counts[wd2] + 1 //increment word count in the dictionary
+		}
+	}
+	return counts
+}
 
-//handshake:
-//send 'ok word map', block until you receive a response.
-//--> awaitBytes()
+//turns a hash map into a big string which can be sent across the net
+func mapToString(counts map[string]int) *strings.Builder{
+	var b strings.Builder //minimize memory copying
+	for key, count := range(counts) {
+		b.WriteString(key)
+		b.WriteRune(' ')
+		b.WriteString(strconv.Itoa(count))
+		b.WriteRune(',')
+	}
+	return &b
+}
 
-//awaitBytes:
-//block until you receive bytes
-//save them in local memory as a big string (or bytes array?)
-//--> wordcount()
-
-//wordcount()
-//use bufio.ReadStrings (or bytes? is there a byte reader?) to read the big string
-//use bufio split scanner to scan by word
-//turn word lowercase
-//save into hashmap
-//--> mapToString()
-
-//mapToString()
-//turn the hash map into a string
-//send the string to leader via net.conn (bufio.writeString?... etc)
-//-->sendReadies()
+//takes a string builder and sends the string across c
+func sendString(c net.Conn, str *strings.Builder) {
+	s := str.String() //get string from the builder object
+	_, err2 := io.WriteString(c, s) //send string. assuming chunk size selected to be sendable
+	if err2 != nil {
+		c.Close()
+		log.Fatal(err2)
+	}
+}
 
 
 func main() {
