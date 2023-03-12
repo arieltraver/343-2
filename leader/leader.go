@@ -38,6 +38,7 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 					c.Close()
 					log.Fatal(err)
 				}
+				addResultToGlobal(c, globalMap)
 			}
 		default:
 			waitForReady(c, ready)
