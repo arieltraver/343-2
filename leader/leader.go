@@ -10,18 +10,21 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	//"math"
+	"bytes"
 )
 
 // Talks to a single remote worker.
 func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup) {
 	defer wait.Done()
 	defer c.Close()
+	globalFile.lock.Lock()
+	chunkSize := globalFile.chunkSize
+	globalFile.lock.Unlock()
 	ready := make(chan string, 2)
 	for {
 		select {
 		case <-ready:
-			sendJobName(c)
+			sendJobName(c, chunkSize)
 			bytes, err := grabMoreText(globalFile)
 			if err != nil {
 				c.Close()
@@ -49,34 +52,37 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 //waits around for a worker to send a "ready" signal
 func waitForReady(c net.Conn, ready chan string) {
 	fmt.Println("waiting for ready")
-	for {
-		netData, err := bufio.NewReader(c).ReadString('\n') 
-		if err != nil {
-			c.Close()
-			log.Fatal("Reading input has failed...")
-		}
-		fmt.Println(string(netData))
-		temp := strings.TrimSpace(strings.ToUpper(string(netData)))
-		if temp == "STOP" {
-			c.Close()
-			log.Fatal("A worker has requested to STOP!")
-		}
-		if temp == "READY" {
-			fmt.Println("A worker is ready!")
-			ready <- "ready"
-			return
-		}
+	netData, err := bufio.NewReader(c).ReadString('\n') 
+	if err != nil {
+		c.Close()
+		log.Fatal("Reading input has failed...\n", err)
+	}
+	fmt.Println(string(netData))
+	temp := strings.TrimSpace(strings.ToUpper(string(netData)))
+	if temp == "STOP" {
+		c.Close()
+		log.Fatal("A worker has requested to STOP!")
+	}
+	if temp == "READY" {
+		fmt.Println("A worker is ready!")
+		ready <- "ready"
+		return
 	}
 }
 
 /*sends a string reading "map words" to a worker connected via net.Conn*/
-func sendJobName(c net.Conn) {
+func sendJobName(c net.Conn, chunkSize int) {
 	fmt.Println("sending job name!")
 	s := "count words\n"
 	_, err := io.WriteString(c, s)
 	if err != nil {
 		c.Close()
-		log.Fatal("Writing to worker has failed")
+		log.Fatal(err)
+	}
+	_, err2 := io.WriteString(c, strconv.Itoa(chunkSize) + "\n")
+	if err2 != nil {
+		c.Close()
+		log.Fatal(err2)
 	}
 	netData, err := bufio.NewReader(c).ReadString('\n')
 	if err != nil {
@@ -96,17 +102,21 @@ func sendJobName(c net.Conn) {
 }
 
 func addResultToGlobal(c net.Conn, globalMap *LockedMap) {
-	netData, err := bufio.NewReader(c).ReadString('\n') //read into a string til the return
+	fmt.Println("waiting to receive result")
+	b := make([]byte, 413571) //change this number, get it from conn
+	bytesRead, err := bufio.NewReader(c).Read(b) //read server's message into bytes array
 	if err != nil {
 		c.Close()
 		log.Fatal(err)
 	}
-	str := strings.NewReader(netData)
-	scanner := bufio.NewScanner(str) //init scanner to parse worker string
+	fmt.Println("bytes read from result:", bytesRead)
+	byteReader := bytes.NewReader(b)
+	scanner := bufio.NewScanner(byteReader)
 	scanner.Split(bufio.ScanWords) //word:count divided by spaces
 	globalMap.lock.Lock() //acquire lock
 	for scanner.Scan() {
 		wdcount := scanner.Text()
+		fmt.Println(wdcount)
 		wdAndCount := strings.Split(wdcount, ":")
 		word := wdAndCount[0]
 		count, err := strconv.Atoi(wdAndCount[1]) //format is "word:count word2:count2"
@@ -216,7 +226,7 @@ func main() {
 		fmt.Println("Usage: 'leader port directory'")
 		return
 	}
-	numChunks := 4 //for this assignment
+	numChunks := 16 //for this assignment
 	PORT := ":" + arguments[1]
 	listener, err := net.Listen("tcp4", PORT)
 	if err != nil {

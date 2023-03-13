@@ -47,7 +47,6 @@ func mapToString(counts map[string]int) *strings.Builder{
 		b.WriteString(strconv.Itoa(count))
 		b.WriteRune(' ')
 	}
-	b.WriteRune('\n')
 	return &b
 }
 
@@ -78,9 +77,9 @@ func main() {
 	for {
 		fmt.Println("sending ready") 
 		sendReadies(c)
-		waitForJobName(c) //needs an error return condition tree
-		b := okAwaitBytes(c)
-		if b == nil {
+		chunkSize := waitForJobName(c) //needs an error return condition tree
+		b := okAwaitBytes(c, chunkSize)
+		if b == nil || len(b) == 0{
 			return //this happens when we are all done.
 		}
 		m := wordcount(b)
@@ -95,47 +94,55 @@ randomly chooses how often to repeat the for loop*/
 func sendReadies(c net.Conn) {
 	_, err2 := io.WriteString(c, "ready\n") //send text to your connection
 	if err2 != nil {
+		c.Close()
 		log.Fatal(err2)
 	}
 }
 
 /*waits for the leader to send "map words"
 may want to try and make use of a timeout function */
-func waitForJobName(c net.Conn) {
-	txt, err := bufio.NewReader(c).ReadString('\n')
+func waitForJobName(c net.Conn) int {
+	reader := bufio.NewReader(c)
+	txt, err := reader.ReadString('\n')
 	if err != nil {
 		c.Close()
-		log.Fatal(err)
+		log.Fatal("error reading from connection\n", err)
 	}
 	if strings.Trim(txt, " \n") == "count words" { //c had random stuff for whatever reason
 		fmt.Println("received order to count words!")
-		return
+		chunksz, err := reader.ReadString('\n')
+		if err != nil {
+			c.Close()
+			log.Fatal(err)
+		}
+		chunkSize, err2 := strconv.Atoi(strings.Trim(chunksz, " \n"))
+		if err2 != nil {
+			c.Close()
+			log.Fatal(err)
+		}
+		return chunkSize
 	}
+	return 0
 }
 
 //send the "ok map words"
 //maybe want to include a timeout option
-func okAwaitBytes(c net.Conn) []byte {
-	chunkLength := 100 //temp, replace with parameter
+func okAwaitBytes(c net.Conn, chunkSize int) []byte {
 	_, err := io.WriteString(c, "ok count words\n")
 	if err != nil {
 		c.Close()
 		log.Fatal(err)
 	}
-	bytes := make([]byte, chunkLength) //array of bytes
-	_, err2 := bufio.NewReader(c).Read(bytes) //read server's message into bytes array
+	bytes := make([]byte, chunkSize) //array of bytes
+	bytesRead, err2 := bufio.NewReader(c).Read(bytes) //read server's message into bytes array
 	if err2 != nil {
 		c.Close()
 		log.Fatal(err)
 	}
-	if strings.ToUpper(string(bytes[0:4])) == "DONE" {
+	fmt.Println("bytes read:", bytesRead)
+	if len(bytes) >= 4 && strings.ToUpper(string(bytes[0:4])) == "DONE" {
 		fmt.Println("job is done!")
 		return nil
 	}
 	return bytes
 }
-
-
-///linking code
-///run "send readies" (loops)
-///run 
