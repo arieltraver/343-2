@@ -53,13 +53,14 @@ func mapToString(counts map[string]int) *strings.Builder{
 //takes a string builder and sends the string across c
 func sendString(c net.Conn, str *strings.Builder){
 	s := str.String() //get string from the builder object
-	_, err2 := io.WriteString(c, s) //send string. assuming chunk size selected to be sendable
+	fmt.Println("sending the string")
+	bytesWritten, err2 := io.WriteString(c, s + "\n") //send string. assuming chunk size selected to be sendable
 	if err2 != nil {
 		c.Close()
 		log.Fatal(err2)
 	}
+	fmt.Println("bytes written:", bytesWritten)
 }
-
 
 func main() {
 	args := os.Args
@@ -78,6 +79,9 @@ func main() {
 		fmt.Println("sending ready") 
 		sendReadies(c)
 		chunkSize := waitForJobName(c) //needs an error return condition tree
+		if chunkSize == 0 {
+			return
+		}
 		b := okAwaitBytes(c, chunkSize)
 		if b == nil || len(b) == 0{
 			return //this happens when we are all done.
@@ -86,7 +90,6 @@ func main() {
 		s := mapToString(m)
 		sendString(c, s)
 	}
-
 }
 
 /*sends "ready" periodically to the leader
@@ -102,11 +105,17 @@ func sendReadies(c net.Conn) {
 /*waits for the leader to send "map words"
 may want to try and make use of a timeout function */
 func waitForJobName(c net.Conn) int {
+	fmt.Println("ready sent, waiting for job")
 	reader := bufio.NewReader(c)
 	txt, err := reader.ReadString('\n')
 	if err != nil {
 		c.Close()
 		log.Fatal("error reading from connection\n", err)
+	}
+	fmt.Println("text is:", txt)
+	if strings.Trim(txt, " \n") == "DONE" {
+		fmt.Println("all done!")
+		return 0
 	}
 	if strings.Trim(txt, " \n") == "count words" { //c had random stuff for whatever reason
 		fmt.Println("received order to count words!")
@@ -121,6 +130,9 @@ func waitForJobName(c net.Conn) int {
 			log.Fatal(err)
 		}
 		return chunkSize
+	} else {
+		c.Close()
+		log.Fatal("unexpected message")
 	}
 	return 0
 }
@@ -134,15 +146,11 @@ func okAwaitBytes(c net.Conn, chunkSize int) []byte {
 		log.Fatal(err)
 	}
 	bytes := make([]byte, chunkSize) //array of bytes
-	bytesRead, err2 := bufio.NewReader(c).Read(bytes) //read server's message into bytes array
+	bytesRead, err2 := io.ReadFull(c, bytes) //read server's message into bytes array
 	if err2 != nil {
 		c.Close()
 		log.Fatal(err)
 	}
 	fmt.Println("bytes read:", bytesRead)
-	if len(bytes) >= 4 && strings.ToUpper(string(bytes[0:4])) == "DONE" {
-		fmt.Println("job is done!")
-		return nil
-	}
 	return bytes
 }

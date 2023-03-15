@@ -10,53 +10,65 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"bytes"
+	//"bytes"
 )
 
-// Talks to a single remote worker.
-func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup) {
+var numChunks int = 16
+
+func checkFatalErr(c net.Conn, err error) {
+	if err != nil {
+		c.Close()
+		log.Fatal(err)
+	}
+}
+
+/**
+Talks to a single remote worker. Upon receiving a "ready" keyword, if there
+are remaining file chunks, sends the worker a "map words" keyword and waits to
+receive "ok map" confirmation keyword, both through sendJobname().
+Upon receiving the worker's confirmation, grabs a file chunk and sends
+it to the worker. Returns if there are no file chunks left.
+**/
+func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, alldone chan int) {
 	defer wait.Done()
 	defer c.Close()
 	globalFile.lock.Lock()
 	chunkSize := globalFile.chunkSize
 	globalFile.lock.Unlock()
+	reader := bufio.NewReader(c)
 	ready := make(chan string, 2)
 	for {
 		select {
 		case <-ready:
-			sendJobName(c, chunkSize)
-			bytes, err := grabMoreText(globalFile)
+			bytes, err := grabMoreText(globalFile, alldone)
 			if err != nil {
 				c.Close()
 				log.Fatal(err)
-			} else if bytes == nil && err == nil {
+			} else if bytes == nil {
+				io.WriteString(c, "DONE\n")
+				c.Close()
+				alldone <- 1
 				//there are no more chunks to be read. end this routine
 				//main waits on each of these to reach this point
 				//so it's important to stop making new connections once the file is complete
-				fmt.Fprint(c, "done")
 				return
 			} else {
+				sendJobName(c, chunkSize, reader)
 				_, err := bufio.NewWriter(c).Write(bytes)
-				if err != nil {
-					c.Close()
-					log.Fatal(err)
-				}
-				addResultToGlobal(c, globalMap)
+				checkFatalErr(c, err)
+				addResultToGlobal(c, globalMap, reader)
 			}
 		default:
-			waitForReady(c, ready)
+			waitForReady(c, ready, reader)
 		}
 	}
 }
 
 //waits around for a worker to send a "ready" signal
-func waitForReady(c net.Conn, ready chan string) {
+func waitForReady(c net.Conn, ready chan string, reader *bufio.Reader) {
 	fmt.Println("waiting for ready")
-	netData, err := bufio.NewReader(c).ReadString('\n') 
-	if err != nil {
-		c.Close()
-		log.Fatal("Reading input has failed...\n", err)
-	}
+	netData, err := reader.ReadString('\n')
+	checkFatalErr(c, err)
 	fmt.Println(string(netData))
 	temp := strings.TrimSpace(strings.ToUpper(string(netData)))
 	if temp == "STOP" {
@@ -71,66 +83,52 @@ func waitForReady(c net.Conn, ready chan string) {
 }
 
 /*sends a string reading "map words" to a worker connected via net.Conn*/
-func sendJobName(c net.Conn, chunkSize int) {
+func sendJobName(c net.Conn, chunkSize int, reader *bufio.Reader) {
 	fmt.Println("sending job name!")
 	s := "count words\n"
 	_, err := io.WriteString(c, s)
-	if err != nil {
-		c.Close()
-		log.Fatal(err)
-	}
+	checkFatalErr(c, err)
 	_, err2 := io.WriteString(c, strconv.Itoa(chunkSize) + "\n")
-	if err2 != nil {
-		c.Close()
-		log.Fatal(err2)
-	}
-	netData, err := bufio.NewReader(c).ReadString('\n')
-	if err != nil {
-		c.Close()
-		log.Fatal(err)
-	}
+	checkFatalErr(c, err2)
+	netData, err := reader.ReadString('\n')
+	checkFatalErr(c, err)
 	fmt.Print(string(netData))
 	temp := strings.TrimSpace(strings.ToUpper(string(netData)))
 	if temp == "STOP" {
 		c.Close()
 		log.Fatal("A worker has requested to STOP!")
 	}
-	if temp == "ok count words" {
+	if temp == "ok count words" { // what if temp equals something other than these two options?
 		fmt.Println("Worker is okay with counting words!")
 		return
 	}
 }
 
-func addResultToGlobal(c net.Conn, globalMap *LockedMap) {
-	fmt.Println("waiting to receive result")
-	b := make([]byte, 413571) //change this number, get it from conn
-	bytesRead, err := bufio.NewReader(c).Read(b) //read server's message into bytes array
-	if err != nil {
-		c.Close()
-		log.Fatal(err)
-	}
-	fmt.Println("bytes read from result:", bytesRead)
-	byteReader := bytes.NewReader(b)
-	scanner := bufio.NewScanner(byteReader)
+func addResultToGlobal(c net.Conn, globalMap *LockedMap, reader *bufio.Reader) {
+	result, err := reader.ReadString('\n')
+	checkFatalErr(c, err)
+	reader2 := strings.NewReader(result)
+	scanner := bufio.NewScanner(reader2)
 	scanner.Split(bufio.ScanWords) //word:count divided by spaces
 	globalMap.lock.Lock() //acquire lock
 	for scanner.Scan() {
 		wdcount := scanner.Text()
 		fmt.Println(wdcount)
 		wdAndCount := strings.Split(wdcount, ":")
+		if len(wdAndCount) != 2 {
+			c.Close()
+			log.Fatal("unexpected entry")
+		}
 		word := wdAndCount[0]
 		count, err := strconv.Atoi(wdAndCount[1]) //format is "word:count word2:count2"
-		if err != nil {
-			c.Close()
-			log.Fatal(err)
-		}
+		checkFatalErr(c, err)
 		globalMap.wordMap[word] += count //add to the global map
 	}
 	globalMap.lock.Unlock() //release lock
 }
 
 /*Takes a locked file object and reads some bytes, returns the array*/
-func grabMoreText(globalFile *LockedFile) ([]byte, error) {
+func grabMoreText(globalFile *LockedFile, alldone chan int) ([]byte, error) {
 	globalFile.lock.Lock()
 	file := globalFile.file
 	chunkSize := globalFile.chunkSize
@@ -139,6 +137,7 @@ func grabMoreText(globalFile *LockedFile) ([]byte, error) {
 	if err != nil {
 		if err == io.EOF {
 			fmt.Println("reached end of file")
+			globalFile.lock.Unlock()
 			return nil, nil
 		} else {
 			log.Fatal(err)
@@ -226,7 +225,6 @@ func main() {
 		fmt.Println("Usage: 'leader port directory'")
 		return
 	}
-	numChunks := 16 //for this assignment
 	PORT := ":" + arguments[1]
 	listener, err := net.Listen("tcp4", PORT)
 	if err != nil {
@@ -250,18 +248,21 @@ func main() {
 	}
 	
 	var wait sync.WaitGroup //wait on all hosts to complete
-	alldone := make(chan int, numChunks) //for use by the routine that is making new connections
+	alldone := make(chan int, numChunks) //check if done, with extra space
 
-	waitOnConnections(listener, globalMap, globalCount, globalFile, &wait, &alldone)
+	go waitOnConnections(listener, globalMap, globalCount, globalFile, &wait, alldone)
 
-	wait.Wait() //wait for all threads to finish
-
-	//write the global map to a file
-	globalMap.lock.Lock()
-	writeMapToFile("output.txt", globalMap.wordMap)
-	fmt.Println("all done folks")
-	globalMap.lock.Unlock()
-	return
+	for {
+		select {
+		case <- alldone:
+			wait.Wait()
+			globalMap.lock.Lock()
+			writeMapToFile("output.txt", globalMap.wordMap)
+			fmt.Println("all done folks")
+			globalMap.lock.Unlock()
+			return
+		}
+	}
 }
 
 /* waits for new connections on your port (specified by net.Listener)
@@ -271,23 +272,18 @@ this is more of an edge case since we will only be testing with four
 ---> logic: every time the for loop runs it sees if alldone has been filled yet
 ---> so if alldone is filled while it's waiting, then it technically could accept 1 more
 */
-func waitOnConnections(listener net.Listener, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, alldone *chan int) {
+func waitOnConnections(listener net.Listener, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, alldone chan int) {
 	for {
-		select {
-		case <- *alldone: //we are finished with the overall task
-			return //dont accept new connections
-		default:
-			fmt.Println("workers connected:", checkCount(globalCount))
-			conn, err := listener.Accept()
-			if err != nil {
-				log.Println("failed connection")
-				return
-			} else { //if one connection fails you can have more
-				fmt.Println("new host joining:", conn.RemoteAddr())
-				wait.Add(1) //add new routine to the waitgroup
-				go handleConnection(conn, globalMap, globalCount, globalFile, wait) // Each client served by a different routine
-				addToCount(globalCount, 1) //keep track of how many workers are connected
-			}
+		fmt.Println("workers connected:", checkCount(globalCount))
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Println("failed connection")
+			return
+		} else { //if one connection fails you can have more
+			fmt.Println("new host joining:", conn.RemoteAddr())
+			wait.Add(1) //add new routine to the waitgroup
+			go handleConnection(conn, globalMap, globalCount, globalFile, wait, alldone) // Each client served by a different routine
+			addToCount(globalCount, 1) //keep track of how many workers are connected
 		}
 	}
 }
