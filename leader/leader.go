@@ -2,11 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
-	"io"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,7 +111,7 @@ func addResultToGlobal(c net.Conn, globalMap *LockedMap, reader *bufio.Reader) {
 	reader2 := strings.NewReader(result)
 	scanner := bufio.NewScanner(reader2)
 	scanner.Split(bufio.ScanWords) //word:count divided by spaces
-	globalMap.lock.Lock() //acquire lock
+	globalMap.lock.Lock()          //acquire lock
 	for scanner.Scan() {
 		wdcount := scanner.Text()
 		fmt.Println(wdcount)
@@ -148,24 +149,26 @@ func grabMoreText(globalFile *LockedFile, alldone chan int) ([]byte, error) {
 	return buff, nil
 }
 
-//a locked map structure, for the global result
+// a locked map structure, for the global result
 type LockedMap struct {
-	wordMap map[string] int;
-	lock sync.Mutex
-}
-//a locked int to keep track of how many workers are connected
-type LockedInt struct {
-	count int
-	lock sync.Mutex
-}
-//a locked file, from which data will be sent to workers
-type LockedFile struct {
-	chunkSize int
-	file *os.File
-	lock sync.Mutex
+	wordMap map[string]int
+	lock    sync.Mutex
 }
 
-//checks a locked int and returns the value
+// a locked int to keep track of how many workers are connected
+type LockedInt struct {
+	count int
+	lock  sync.Mutex
+}
+
+// a locked file, from which data will be sent to workers
+type LockedFile struct {
+	chunkSize int
+	file      *os.File
+	lock      sync.Mutex
+}
+
+// checks a locked int and returns the value
 func checkCount(globalCount *LockedInt) int {
 	globalCount.lock.Lock()
 	c := globalCount.count
@@ -178,12 +181,11 @@ func addToCount(globalCount *LockedInt, diff int) {
 	globalCount.lock.Unlock()
 }
 
-
-//enter data into the global locked map structure
+// enter data into the global locked map structure
 func enterData(routineMap map[string]int, globalMap *LockedMap) {
 	globalMap.lock.Lock() //obtain the lock
 	words := globalMap.wordMap
-	for word, count := range(routineMap) {
+	for word, count := range routineMap {
 		words[word] = words[word] + count
 	}
 	globalMap.lock.Unlock() //release the lock
@@ -197,7 +199,7 @@ func writeMapToFile(filename string, counts map[string]int) error {
 	}
 	defer output.Close() //make sure file closes before return.
 	writer := bufio.NewWriter(output)
-	for key, count := range(counts) {
+	for key, count := range counts {
 		str := key + " " + strconv.Itoa(count) + "\n"
 		_, err := writer.WriteString(str)
 		if err != nil {
@@ -209,7 +211,7 @@ func writeMapToFile(filename string, counts map[string]int) error {
 }
 
 func main() {
-	
+
 	//initialize a global file --DONE untested
 	//initialize a global hash map --DONE untested
 	//loop which waits for new hosts to connect --DONE TEST
@@ -219,7 +221,6 @@ func main() {
 	// once all threads are complete, write the global map to a file --DONE untested
 	// end
 
-	
 	arguments := os.Args
 	if len(arguments) <= 2 {
 		fmt.Println("Usage: 'leader port directory'")
@@ -237,8 +238,8 @@ func main() {
 	directory := arguments[2]
 	fmt.Println("directory:", directory)
 	globalFile := prepareFile(directory, numChunks) //create a filepointer to the one file in there
-	totalMap := make(map[string] int) //to be filled
-	globalMap := &LockedMap{ //lock so one thread at a time may use it
+	totalMap := make(map[string]int)                //to be filled
+	globalMap := &LockedMap{                        //lock so one thread at a time may use it
 		wordMap: totalMap,
 	}
 	//is it better to do this or to use a channel of separate ones? uncertain...
@@ -246,9 +247,15 @@ func main() {
 	globalCount := &LockedInt{
 		count: 0,
 	}
+<<<<<<< HEAD
 	
 	var wait sync.WaitGroup //wait on all hosts to complete
 	alldone := make(chan int, numChunks) //check if done, with extra space
+=======
+
+	var wait sync.WaitGroup              //wait on all hosts to complete
+	alldone := make(chan int, numChunks) //for use by the routine that is making new connections
+>>>>>>> dfa148d5131b6d2c577a51d01daae24c5e59cdf1
 
 	go waitOnConnections(listener, globalMap, globalCount, globalFile, &wait, alldone)
 
@@ -265,12 +272,10 @@ func main() {
 	}
 }
 
-/* waits for new connections on your port (specified by net.Listener)
-ou can have as many workers as you want
-however, once alldone channel is filled, then it will only accept maximum 1 new connection*
-this is more of an edge case since we will only be testing with four
----> logic: every time the for loop runs it sees if alldone has been filled yet
----> so if alldone is filled while it's waiting, then it technically could accept 1 more
+/*
+Waits for new connections on your port (specified by net.Listener)
+You can have as many workers as you want
+It gives jobs out to whatever worker is ready
 */
 func waitOnConnections(listener net.Listener, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, alldone chan int) {
 	for {
@@ -289,7 +294,7 @@ func waitOnConnections(listener net.Listener, globalMap *LockedMap, globalCount 
 }
 
 /* Creates a LockedFile struct from a directory with one file. Returns the LockedFile as well as the size of each chunk in bytes.
-*/
+ */
 func prepareFile(directory string, numChunks int) *LockedFile {
 	fps, err := os.ReadDir(directory)
 	if err != nil {
@@ -304,8 +309,8 @@ func prepareFile(directory string, numChunks int) *LockedFile {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fileSize := fileInfo.Size() // get file size
-	chunkSize := int(fileSize) / numChunks + 1 //size of chunk per each host
+	fileSize := fileInfo.Size()              // get file size
+	chunkSize := int(fileSize)/numChunks + 1 //size of chunk per each host
 
 	lockedFile := &LockedFile{chunkSize: chunkSize, file: file}
 	return lockedFile
