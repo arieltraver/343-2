@@ -3,6 +3,7 @@
 package main
 
 import (
+	"../helper"
 	"bufio"
 	"bytes"
 	"fmt"
@@ -50,15 +51,12 @@ func mapToString(counts map[string]int) *strings.Builder {
 	return &b
 }
 
-//takes a string builder and sends the string across c
-func sendString(c net.Conn, str *strings.Builder){
-	s := str.String() //get string from the builder object
+// takes a string builder and sends the string across c
+func sendString(c net.Conn, builder *strings.Builder) {
+	s := builder.String() //get string from the builder object
 	fmt.Println("sending the string")
-	bytesWritten, err2 := io.WriteString(c, s + "\n") //send string. assuming chunk size selected to be sendable
-	if err2 != nil {
-		c.Close()
-		log.Fatal(err2)
-	}
+	bytesWritten, err := io.WriteString(c, s+"\n") //send string. assuming chunk size selected to be sendable
+	helper.CheckFatalErr(c, err)
 	fmt.Println("bytes written:", bytesWritten)
 }
 
@@ -124,15 +122,9 @@ func waitForJobName(c net.Conn) int {
 	if strings.Trim(txt, " \n") == "count words" { //c had random stuff for whatever reason
 		fmt.Println("received order to count words!")
 		chunksz, err := reader.ReadString('\n')
-		if err != nil {
-			c.Close()
-			log.Fatal(err)
-		}
+		helper.CheckFatalErr(c, err)
 		chunkSize, err2 := strconv.Atoi(strings.Trim(chunksz, " \n"))
-		if err2 != nil {
-			c.Close()
-			log.Fatal(err)
-		}
+		helper.CheckFatalErr(c, err2)
 		return chunkSize
 	} else {
 		c.Close()
@@ -145,16 +137,10 @@ func waitForJobName(c net.Conn) int {
 // maybe want to include a timeout option
 func okAwaitBytes(c net.Conn, chunkSize int) []byte {
 	_, err := io.WriteString(c, "ok count words\n")
-	if err != nil {
-		c.Close()
-		log.Fatal(err)
-	}
-	bytes := make([]byte, chunkSize) //array of bytes
+	helper.CheckFatalErr(c, err)
+	bytes := make([]byte, chunkSize)         //array of bytes
 	bytesRead, err2 := io.ReadFull(c, bytes) //read server's message into bytes array
-	if err2 != nil {
-		c.Close()
-		log.Fatal(err)
-	}
+	helper.CheckFatalErr(c, err2)
 	fmt.Println("bytes read:", bytesRead)
 	return bytes
 }
