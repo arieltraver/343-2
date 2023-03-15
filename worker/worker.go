@@ -27,10 +27,8 @@ func wordcount(b []byte) map[string]int {
 	scanner := bufio.NewScanner(byteReader) //buffered i/o: creates a pipe for reading
 	scanner.Split(bufio.ScanWords)          //break reading pattern into words
 	for scanner.Scan() {                    //reads until EOF OR until the limit
-		word := scanner.Text()
-		word = strings.ToLower(word)                 //lowercase-ify
-		word = nonLetter.ReplaceAllString(word, " ") //get rid of extra characters
-		words := strings.Split(word, " ")            //split words by char
+		word := strings.ToLower(scanner.Text())                            //lowercase-ify
+		words := strings.Split(nonLetter.ReplaceAllString(word, " "), " ") //get rid of extra characters
 		for _, wd := range words {
 			wd2 := nonLetter.ReplaceAllString(wd, "") //get rid of spaces
 			counts[wd2] += 1                          //increment word count in the dictionary
@@ -41,7 +39,7 @@ func wordcount(b []byte) map[string]int {
 
 // turns a hash map into a big string which can be sent across the net
 func mapToString(counts map[string]int) *strings.Builder {
-	var b strings.Builder //minimize memory copying
+	var b strings.Builder // minimize memory copying
 	for key, count := range counts {
 		b.WriteString(key)
 		b.WriteRune(':')
@@ -56,7 +54,7 @@ func sendString(c net.Conn, builder *strings.Builder) {
 	s := builder.String() //get string from the builder object
 	fmt.Println("sending the string")
 	bytesWritten, err := io.WriteString(c, s+"\n") //send string. assuming chunk size selected to be sendable
-	helper.CheckFatalErr(c, err)
+	helper.CheckFatalErrConn(c, err)
 	fmt.Println("bytes written:", bytesWritten)
 }
 
@@ -68,10 +66,7 @@ func main() {
 	}
 	conn := args[1]
 	c, err := net.Dial("tcp", conn) //connect to host:port
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
+	helper.CheckFatalErrConn(c, err)
 	defer c.Close() //make sure it closes
 	for {
 		fmt.Println("sending ready")
@@ -95,11 +90,8 @@ sends "ready" periodically to the leader
 randomly chooses how often to repeat the for loop
 */
 func sendReadies(c net.Conn) {
-	_, err2 := io.WriteString(c, "ready\n") //send text to your connection
-	if err2 != nil {
-		c.Close()
-		log.Fatal(err2)
-	}
+	_, err := io.WriteString(c, "ready\n") //send text to your connection
+	helper.CheckFatalErrConn(c, err)
 }
 
 /*
@@ -110,10 +102,7 @@ func waitForJobName(c net.Conn) int {
 	fmt.Println("ready sent, waiting for job")
 	reader := bufio.NewReader(c)
 	txt, err := reader.ReadString('\n')
-	if err != nil {
-		c.Close()
-		log.Fatal("error reading from connection\n", err)
-	}
+	helper.CheckFatalErrConn(c, err)
 	fmt.Println("text is:", txt)
 	if strings.Trim(txt, " \n") == "DONE" {
 		fmt.Println("all done!")
@@ -122,9 +111,9 @@ func waitForJobName(c net.Conn) int {
 	if strings.Trim(txt, " \n") == "count words" { //c had random stuff for whatever reason
 		fmt.Println("received order to count words!")
 		chunksz, err := reader.ReadString('\n')
-		helper.CheckFatalErr(c, err)
+		helper.CheckFatalErrConn(c, err)
 		chunkSize, err2 := strconv.Atoi(strings.Trim(chunksz, " \n"))
-		helper.CheckFatalErr(c, err2)
+		helper.CheckFatalErrConn(c, err2)
 		return chunkSize
 	} else {
 		c.Close()
@@ -137,10 +126,10 @@ func waitForJobName(c net.Conn) int {
 // maybe want to include a timeout option
 func okAwaitBytes(c net.Conn, chunkSize int) []byte {
 	_, err := io.WriteString(c, "ok count words\n")
-	helper.CheckFatalErr(c, err)
+	helper.CheckFatalErrConn(c, err)
 	bytes := make([]byte, chunkSize)         //array of bytes
 	bytesRead, err2 := io.ReadFull(c, bytes) //read server's message into bytes array
-	helper.CheckFatalErr(c, err2)
+	helper.CheckFatalErrConn(c, err2)
 	fmt.Println("bytes read:", bytesRead)
 	return bytes
 }

@@ -17,6 +17,25 @@ import (
 var NUMCHUNKS int = 16   //number of chunks to divide file into
 var TESTING bool = false //used to wait for more hosts to connect, just adds time
 
+// a locked map structure, for the global result
+type SafeMap struct {
+	wordMap map[string]int
+	lock    sync.Mutex
+}
+
+// a locked int to keep track of how many workers are connected
+type SafeInt struct {
+	count int
+	lock  sync.Mutex
+}
+
+// a locked file, from which data will be sent to workers
+type SafeFile struct {
+	chunkSize int
+	file      *os.File
+	lock      sync.Mutex
+}
+
 /*
 *
 Talks to a single remote worker. Upon receiving a "ready" keyword, if there
@@ -26,7 +45,7 @@ Upon receiving the worker's confirmation, grabs a file chunk and sends
 it to the worker. Returns if there are no file chunks left.
 *
 */
-func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, alldone chan int) {
+func handleConnection(c net.Conn, globalMap *SafeMap, globalCount *SafeInt, globalFile *SafeFile, wait *sync.WaitGroup, alldone chan int) {
 	if TESTING {
 		time.Sleep(10 * time.Second)
 	}
@@ -39,23 +58,20 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 	ready := make(chan string, 2)
 	for {
 		select {
-		case <-ready:
-			bytes, err := grabMoreText(globalFile, alldone)
-			if err != nil {
-				c.Close()
-				log.Fatal(err)
-			} else if bytes == nil {
+		case <-ready: // worker requests job
+			bytes, err := grabMoreText(globalFile, alldone) // grab chunk
+			helper.CheckFatalErrConn(c, err)
+			if bytes == nil { // no more chunks to be read
 				io.WriteString(c, "DONE\n")
 				c.Close()
 				alldone <- 1
-				//there are no more chunks to be read. end this routine
-				//main waits on each of these to reach this point
-				//so it's important to stop making new connections once the file is complete
+				// main waits on each of these to reach this point
+				// so it's important to stop making new connections once the file is complete
 				return
 			} else {
 				sendJobName(c, chunkSize, reader)
-				_, err := bufio.NewWriter(c).Write(bytes)
-				helper.CheckFatalErr(c, err)
+				_, err := bufio.NewWriter(c).Write(bytes) // send chunk
+				helper.CheckFatalErrConn(c, err)
 				addResultToGlobal(c, globalMap, reader)
 			}
 		default:
@@ -64,18 +80,21 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 	}
 }
 
-// waits around for a worker to send a "ready" signal
+/*
+* Waits for a worker to request a job. Closes the connection and exits if the
+* worker requests to stop. Sends "ready" to handleConnection() if the worker
+* sends the ready signal.
+ */
 func waitForReady(c net.Conn, ready chan string, reader *bufio.Reader) {
 	fmt.Println("waiting for ready")
 	netData, err := reader.ReadString('\n')
-	helper.CheckFatalErr(c, err)
-	fmt.Println(string(netData))
-	temp := strings.TrimSpace(strings.ToUpper(string(netData)))
-	if temp == "STOP" {
+	helper.CheckFatalErrConn(c, err)
+	msg := strings.TrimSpace(strings.ToUpper(string(netData)))
+	if msg == "STOP" {
 		c.Close()
 		log.Fatal("A worker has requested to STOP!")
 	}
-	if temp == "READY" {
+	if msg == "READY" {
 		fmt.Println("A worker is ready!")
 		ready <- "ready"
 		return
@@ -87,18 +106,20 @@ func sendJobName(c net.Conn, chunkSize int, reader *bufio.Reader) {
 	fmt.Println("sending job name!")
 	s := "count words\n"
 	_, err := io.WriteString(c, s)
-	helper.CheckFatalErr(c, err)
+	helper.CheckFatalErrConn(c, err)
+
 	_, err2 := io.WriteString(c, strconv.Itoa(chunkSize)+"\n")
-	helper.CheckFatalErr(c, err2)
+	helper.CheckFatalErrConn(c, err2)
+
 	netData, err := reader.ReadString('\n')
-	helper.CheckFatalErr(c, err)
-	fmt.Print(string(netData))
-	temp := strings.TrimSpace(strings.ToUpper(string(netData)))
-	if temp == "STOP" {
+	helper.CheckFatalErrConn(c, err)
+
+	msg := strings.TrimSpace(strings.ToUpper(string(netData)))
+	if msg == "STOP" {
 		c.Close()
 		log.Fatal("A worker has requested to STOP!")
 	}
-	if temp == "ok count words" { // what if temp equals something other than these two options?
+	if msg == "ok count words" {
 		fmt.Println("Worker is okay with counting words!")
 		return
 	}
@@ -107,16 +128,16 @@ func sendJobName(c net.Conn, chunkSize int, reader *bufio.Reader) {
 /*
 Takes a string input from the worker and inputs results to global map data structure
 */
-func addResultToGlobal(c net.Conn, globalMap *LockedMap, reader *bufio.Reader) {
+func addResultToGlobal(c net.Conn, globalMap *SafeMap, reader *bufio.Reader) {
 	result, err := reader.ReadString('\n')
-	helper.CheckFatalErr(c, err)
+	helper.CheckFatalErrConn(c, err)
+
 	reader2 := strings.NewReader(result)
 	scanner := bufio.NewScanner(reader2)
-	scanner.Split(bufio.ScanWords) //word:count divided by spaces
-	globalMap.lock.Lock()          //acquire lock
+	scanner.Split(bufio.ScanWords) // word:count divided by spaces
+	globalMap.lock.Lock()          // acquire lock
 	for scanner.Scan() {
 		wdcount := scanner.Text()
-		fmt.Println(wdcount)
 		wdAndCount := strings.Split(wdcount, ":")
 		if len(wdAndCount) != 2 {
 			c.Close()
@@ -124,14 +145,14 @@ func addResultToGlobal(c net.Conn, globalMap *LockedMap, reader *bufio.Reader) {
 		}
 		word := wdAndCount[0]
 		count, err := strconv.Atoi(wdAndCount[1]) //format is "word:count word2:count2"
-		helper.CheckFatalErr(c, err)
+		helper.CheckFatalErrConn(c, err)
 		globalMap.wordMap[word] += count //add to the global map
 	}
 	globalMap.lock.Unlock() //release lock
 }
 
 /*Takes a locked file object and reads some bytes, returns the array*/
-func grabMoreText(globalFile *LockedFile, alldone chan int) ([]byte, error) {
+func grabMoreText(globalFile *SafeFile, alldone chan int) ([]byte, error) {
 	globalFile.lock.Lock()
 	file := globalFile.file
 	chunkSize := globalFile.chunkSize
@@ -146,70 +167,84 @@ func grabMoreText(globalFile *LockedFile, alldone chan int) ([]byte, error) {
 			log.Fatal(err)
 		}
 	}
-	fmt.Println("bytes read:", bytesRead)
 	globalFile.lock.Unlock()
+	fmt.Println("bytes read:", bytesRead)
 	return buff, nil
 }
 
-// a locked map structure, for the global result
-type LockedMap struct {
-	wordMap map[string]int
-	lock    sync.Mutex
-}
-
-// a locked int to keep track of how many workers are connected
-type LockedInt struct {
-	count int
-	lock  sync.Mutex
-}
-
-// a locked file, from which data will be sent to workers
-type LockedFile struct {
-	chunkSize int
-	file      *os.File
-	lock      sync.Mutex
-}
-
 // checks a locked int and returns the value
-func checkCount(globalCount *LockedInt) int {
+func checkCount(globalCount *SafeInt) int {
 	globalCount.lock.Lock()
 	c := globalCount.count
 	globalCount.lock.Unlock()
 	return c
 }
-func addToCount(globalCount *LockedInt, diff int) {
+func addToCount(globalCount *SafeInt, diff int) {
 	globalCount.lock.Lock()
 	globalCount.count += diff
 	globalCount.lock.Unlock()
 }
 
 /*Enters data into the global locked map structure*/
-func enterData(routineMap map[string]int, globalMap *LockedMap) {
-	globalMap.lock.Lock() //obtain the lock
+func enterData(routineMap map[string]int, globalMap *SafeMap) {
+	globalMap.lock.Lock() // lock
 	words := globalMap.wordMap
 	for word, count := range routineMap {
-		words[word] = words[word] + count
+		words[word] += count
 	}
-	globalMap.lock.Unlock() //release the lock
+	globalMap.lock.Unlock() // release the lock
 }
 
 /*Writes the final word count results to an output file.*/
-func writeMapToFile(filename string, counts map[string]int) error {
+func writeMapToFile(filename string, counts map[string]int) {
 	output, err := os.Create(filename)
-	if err != nil {
-		return fmt.Errorf("error creating output file")
-	}
-	defer output.Close() //make sure file closes before return.
+	helper.CheckFatalErr(err)
+	defer output.Close() // make sure file closes before return
 	writer := bufio.NewWriter(output)
-	for key, count := range counts {
-		str := key + " " + strconv.Itoa(count) + "\n"
+	words := helper.SortWords(counts)
+	for _, key := range words {
+		str := key + " " + strconv.Itoa(counts[key]) + "\n"
 		_, err := writer.WriteString(str)
-		if err != nil {
-			return fmt.Errorf("error writing to output file")
-		}
+		helper.CheckFatalErr(err)
 		writer.Flush()
 	}
-	return nil
+}
+
+/*
+Waits for new connections on your port (specified by net.Listener)
+You can have as many workers as you want
+It gives jobs out to whatever worker is ready
+*/
+func waitOnConnections(listener net.Listener, globalMap *SafeMap, globalCount *SafeInt, globalFile *SafeFile, wait *sync.WaitGroup, alldone chan int) {
+	for {
+		fmt.Println("workers connected:", checkCount(globalCount))
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Println("failed connection")
+			return
+		} else { //if one connection fails you can have more
+			fmt.Println("new host joining:", conn.RemoteAddr())
+			wait.Add(1)                                                                  //add new routine to the waitgroup
+			go handleConnection(conn, globalMap, globalCount, globalFile, wait, alldone) // Each client served by a different routine
+			addToCount(globalCount, 1)                                                   //keep track of how many workers are connected
+		}
+	}
+}
+
+/* Creates a SafeFile struct from a directory with one file. Returns the SafeFile as well as the size of each chunk in bytes.
+ */
+func prepareFile(directory string, NUMCHUNKS int) *SafeFile {
+	fps, err := os.ReadDir(directory)
+	helper.CheckFatalErr((err))
+	file, err := os.Open(directory + "/" + fps[0].Name())
+	helper.CheckFatalErr((err))
+	fileInfo, err := file.Stat() // get file stats
+	helper.CheckFatalErr((err))
+	fileSize := fileInfo.Size()              // get file size
+	chunkSize := int(fileSize)/NUMCHUNKS + 1 //size of chunk per each host
+
+	SafeFile := &SafeFile{chunkSize: chunkSize, file: file}
+	return SafeFile
 }
 
 func main() {
@@ -230,10 +265,7 @@ func main() {
 	}
 	PORT := ":" + arguments[1]
 	listener, err := net.Listen("tcp4", PORT)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
+	helper.CheckFatalErr((err))
 	defer listener.Close()
 	fmt.Println("listening on port", arguments[1])
 
@@ -241,12 +273,12 @@ func main() {
 	fmt.Println("directory:", directory)
 	globalFile := prepareFile(directory, NUMCHUNKS) //create a filepointer to the one file in there
 	totalMap := make(map[string]int)                //to be filled
-	globalMap := &LockedMap{                        //lock so one thread at a time may use it
+	globalMap := &SafeMap{                          //lock so one thread at a time may use it
 		wordMap: totalMap,
 	}
 	//is it better to do this or to use a channel of separate ones? uncertain...
 	//counts the number of workers online
-	globalCount := &LockedInt{
+	globalCount := &SafeInt{
 		count: 0,
 	}
 
@@ -261,53 +293,9 @@ func main() {
 			wait.Wait()
 			globalMap.lock.Lock()
 			writeMapToFile("output.txt", globalMap.wordMap)
-			fmt.Println("all done folks")
 			globalMap.lock.Unlock()
+			fmt.Println("all done folks")
 			return
 		}
 	}
-}
-
-/*
-Waits for new connections on your port (specified by net.Listener)
-You can have as many workers as you want
-It gives jobs out to whatever worker is ready
-*/
-func waitOnConnections(listener net.Listener, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, alldone chan int) {
-	for {
-		fmt.Println("workers connected:", checkCount(globalCount))
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Println("failed connection")
-			return
-		} else { //if one connection fails you can have more
-			fmt.Println("new host joining:", conn.RemoteAddr())
-			wait.Add(1)                                                                  //add new routine to the waitgroup
-			go handleConnection(conn, globalMap, globalCount, globalFile, wait, alldone) // Each client served by a different routine
-			addToCount(globalCount, 1)                                                   //keep track of how many workers are connected
-		}
-	}
-}
-
-/* Creates a LockedFile struct from a directory with one file. Returns the LockedFile as well as the size of each chunk in bytes.
- */
-func prepareFile(directory string, NUMCHUNKS int) *LockedFile {
-	fps, err := os.ReadDir(directory)
-	if err != nil {
-		log.Fatal(err)
-	}
-	file, err := os.Open(directory + "/" + fps[0].Name())
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fileInfo, err := file.Stat() // get file stats
-	if err != nil {
-		log.Fatal(err)
-	}
-	fileSize := fileInfo.Size()              // get file size
-	chunkSize := int(fileSize)/NUMCHUNKS + 1 //size of chunk per each host
-
-	lockedFile := &LockedFile{chunkSize: chunkSize, file: file}
-	return lockedFile
 }
