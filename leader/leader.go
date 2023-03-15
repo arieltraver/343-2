@@ -13,9 +13,10 @@ import (
 	"time"
 )
 
-var NUMCHUNKS int = 16
-var TESTING bool = false
+var NUMCHUNKS int = 16 //number of chunks to divide file into
+var TESTING bool = false //used to wait for more hosts to connect, just adds time
 
+//error handling for readability
 func checkFatalErr(c net.Conn, err error) {
 	if err != nil {
 		c.Close()
@@ -39,7 +40,7 @@ func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, 
 	globalFile.lock.Lock()
 	chunkSize := globalFile.chunkSize
 	globalFile.lock.Unlock()
-	reader := bufio.NewReader(c)
+	reader := bufio.NewReader(c) //passed between functions, reads from c
 	ready := make(chan string, 2)
 	for {
 		select {
@@ -108,6 +109,9 @@ func sendJobName(c net.Conn, chunkSize int, reader *bufio.Reader) {
 	}
 }
 
+/*
+Takes a string input from the worker and inputs results to global map data structure
+*/
 func addResultToGlobal(c net.Conn, globalMap *LockedMap, reader *bufio.Reader) {
 	result, err := reader.ReadString('\n')
 	checkFatalErr(c, err)
@@ -184,7 +188,7 @@ func addToCount(globalCount *LockedInt, diff int) {
 	globalCount.lock.Unlock()
 }
 
-// enter data into the global locked map structure
+/*Enters data into the global locked map structure*/
 func enterData(routineMap map[string]int, globalMap *LockedMap) {
 	globalMap.lock.Lock() //obtain the lock
 	words := globalMap.wordMap
@@ -194,7 +198,7 @@ func enterData(routineMap map[string]int, globalMap *LockedMap) {
 	globalMap.lock.Unlock() //release the lock
 }
 
-// Writes the final word count results to an output file.
+/*Writes the final word count results to an output file.*/
 func writeMapToFile(filename string, counts map[string]int) error {
 	output, err := os.Create(filename)
 	if err != nil {
@@ -215,13 +219,13 @@ func writeMapToFile(filename string, counts map[string]int) error {
 
 func main() {
 
-	//initialize a global file --DONE untested
-	//initialize a global hash map --DONE untested
-	//loop which waits for new hosts to connect --DONE TEST
-	// -- pass a pointer to the global locked file  --DONE TESTED
-	// --- also need to pass a pointer to the global map (with mutex) to each connection --DONE TESTED
-	// use sync.waitgroup to wait for all threads to complete --DONE untested
-	// once all threads are complete, write the global map to a file --DONE untested
+	//initialize a global file --DONE tested
+	//initialize a global hash map --DONE tested
+	//loop which waits for new hosts to connect --DONE tested
+	// -- pass a pointer to the global locked file  --DONE tested
+	// --- also need to pass a pointer to the global map (with mutex) to each connection --DONE tested
+	// use sync.waitgroup to wait for all threads to complete --DONE tested
+	// once all threads are complete, write the global map to a file --DONE tested
 	// end
 
 	arguments := os.Args
