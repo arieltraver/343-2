@@ -132,6 +132,7 @@ func okAwaitBytes(c net.Conn) []byte {
 		log.Fatal(err)
 	}
 	if strings.ToUpper(string(bytes[0:4])) == "DONE" {
+		// close connection?
 		fmt.Println("job is done!")
 		return nil
 	}
