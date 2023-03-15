@@ -29,6 +29,9 @@ func CheckFatalErrConn(c net.Conn, err error) {
 	}
 }
 
+/**
+*
+**/
 func SortWords(freq map[string]int) []string {
 	words := make([]string, len(freq))
 	i := 0

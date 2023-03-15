@@ -143,10 +143,9 @@ func addResultToGlobal(c net.Conn, globalMap *SafeMap, reader *bufio.Reader) {
 			c.Close()
 			log.Fatal("unexpected entry")
 		}
-		word := wdAndCount[0]
 		count, err := strconv.Atoi(wdAndCount[1]) //format is "word:count word2:count2"
 		helper.CheckFatalErrConn(c, err)
-		globalMap.wordMap[word] += count //add to the global map
+		globalMap.wordMap[wdAndCount[0]] += count //add to the global map
 	}
 	globalMap.lock.Unlock() //release lock
 }
@@ -157,7 +156,7 @@ func grabMoreText(globalFile *SafeFile, alldone chan int) ([]byte, error) {
 	file := globalFile.file
 	chunkSize := globalFile.chunkSize
 	buff := make([]byte, chunkSize)
-	bytesRead, err := file.Read(buff) //read the length of buffer from file
+	bytesRead, err := file.Read(buff) // read the length of buffer from file
 	if err != nil {
 		if err == io.EOF {
 			fmt.Println("reached end of file")
@@ -292,7 +291,7 @@ func main() {
 		case <-alldone:
 			wait.Wait()
 			globalMap.lock.Lock()
-			writeMapToFile("output.txt", globalMap.wordMap)
+			writeMapToFile("../output/output.txt", globalMap.wordMap)
 			globalMap.lock.Unlock()
 			fmt.Println("all done folks")
 			return
