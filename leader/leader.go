@@ -10,10 +10,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	//"bytes"
+	"time"
 )
 
-var numChunks int = 16
+var NUMCHUNKS int = 16
+var TESTING bool = false
 
 func checkFatalErr(c net.Conn, err error) {
 	if err != nil {
@@ -30,6 +31,9 @@ Upon receiving the worker's confirmation, grabs a file chunk and sends
 it to the worker. Returns if there are no file chunks left.
 **/
 func handleConnection(c net.Conn, globalMap *LockedMap, globalCount *LockedInt, globalFile *LockedFile, wait *sync.WaitGroup, alldone chan int) {
+	if TESTING {
+		time.Sleep(10 * time.Second)
+	}
 	defer wait.Done()
 	defer c.Close()
 	globalFile.lock.Lock()
@@ -236,7 +240,7 @@ func main() {
 
 	directory := arguments[2]
 	fmt.Println("directory:", directory)
-	globalFile := prepareFile(directory, numChunks) //create a filepointer to the one file in there
+	globalFile := prepareFile(directory, NUMCHUNKS) //create a filepointer to the one file in there
 	totalMap := make(map[string]int)                //to be filled
 	globalMap := &LockedMap{                        //lock so one thread at a time may use it
 		wordMap: totalMap,
@@ -248,7 +252,7 @@ func main() {
 	}
 	
 	var wait sync.WaitGroup //wait on all hosts to complete
-	alldone := make(chan int, numChunks) //check if done, with extra space
+	alldone := make(chan int, NUMCHUNKS) //check if done, with extra space
 
 	go waitOnConnections(listener, globalMap, globalCount, globalFile, &wait, alldone)
 
@@ -288,7 +292,7 @@ func waitOnConnections(listener net.Listener, globalMap *LockedMap, globalCount 
 
 /* Creates a LockedFile struct from a directory with one file. Returns the LockedFile as well as the size of each chunk in bytes.
  */
-func prepareFile(directory string, numChunks int) *LockedFile {
+func prepareFile(directory string, NUMCHUNKS int) *LockedFile {
 	fps, err := os.ReadDir(directory)
 	if err != nil {
 		log.Fatal(err)
@@ -303,7 +307,7 @@ func prepareFile(directory string, numChunks int) *LockedFile {
 		log.Fatal(err)
 	}
 	fileSize := fileInfo.Size()              // get file size
-	chunkSize := int(fileSize)/numChunks + 1 //size of chunk per each host
+	chunkSize := int(fileSize)/NUMCHUNKS + 1 //size of chunk per each host
 
 	lockedFile := &LockedFile{chunkSize: chunkSize, file: file}
 	return lockedFile
