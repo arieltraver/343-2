@@ -50,18 +50,11 @@ func mapToString(counts map[string]int) *strings.Builder {
 	return &b
 }
 
-<<<<<<< HEAD
 //takes a string builder and sends the string across c
 func sendString(c net.Conn, str *strings.Builder){
 	s := str.String() //get string from the builder object
 	fmt.Println("sending the string")
 	bytesWritten, err2 := io.WriteString(c, s + "\n") //send string. assuming chunk size selected to be sendable
-=======
-// takes a string builder and sends the string across c
-func sendString(c net.Conn, str *strings.Builder) {
-	s := str.String()               //get string from the builder object
-	_, err2 := io.WriteString(c, s) //send string. assuming chunk size selected to be sendable
->>>>>>> dfa148d5131b6d2c577a51d01daae24c5e59cdf1
 	if err2 != nil {
 		c.Close()
 		log.Fatal(err2)
@@ -156,13 +149,8 @@ func okAwaitBytes(c net.Conn, chunkSize int) []byte {
 		c.Close()
 		log.Fatal(err)
 	}
-<<<<<<< HEAD
 	bytes := make([]byte, chunkSize) //array of bytes
 	bytesRead, err2 := io.ReadFull(c, bytes) //read server's message into bytes array
-=======
-	bytes := make([]byte, chunkSize)                  //array of bytes
-	bytesRead, err2 := bufio.NewReader(c).Read(bytes) //read server's message into bytes array
->>>>>>> dfa148d5131b6d2c577a51d01daae24c5e59cdf1
 	if err2 != nil {
 		c.Close()
 		log.Fatal(err)
