@@ -5,7 +5,7 @@ package main
 import (
 	"../helper"
 	"bufio"
-	"bytes"
+	//"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -21,19 +21,16 @@ import (
 // read the byte array sent from the leader and finds the frequency of each word.
 func wordcount(b []byte) map[string]int {
 	fmt.Println("mapping words")
-	var nonLetter = regexp.MustCompile(`[^a-zA-Z0-9]+`)
-	counts := make(map[string]int)          //for the result
-	byteReader := bytes.NewReader(b)        //reader class for byte array
-	scanner := bufio.NewScanner(byteReader) //buffered i/o: creates a pipe for reading
-	scanner.Split(bufio.ScanWords)          //break reading pattern into words
-	for scanner.Scan() {                    //reads until EOF OR until the limit
-		word := strings.ToLower(scanner.Text())                            //lowercase-ify
-		words := strings.Split(nonLetter.ReplaceAllString(word, " "), " ") //get rid of extra characters
-		for _, wd := range words {
-			wd2 := nonLetter.ReplaceAllString(wd, "") //get rid of spaces
-			counts[wd2] += 1                          //increment word count in the dictionary
-		}
+	nonLetter, err := regexp.Compile("[^a-zA-Z0-9]")
+	helper.CheckFatalErr(err)
+	counts := make(map[string]int)
+	str := string(b[:])                                           //break reading pattern into words
+	word := strings.ToLower(nonLetter.ReplaceAllString(str, " ")) //get rid of extra characters
+	words := strings.Fields(word)
+	for _, wd := range words {
+		counts[wd] += 1 // increment word count in the dictionary
 	}
+
 	return counts
 }
 

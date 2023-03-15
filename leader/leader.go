@@ -63,8 +63,8 @@ func handleConnection(c net.Conn, globalMap *SafeMap, globalCount *SafeInt, glob
 			helper.CheckFatalErrConn(c, err)
 			if bytes == nil { // no more chunks to be read
 				io.WriteString(c, "DONE\n")
-				c.Close()
 				alldone <- 1
+				c.Close()
 				// main waits on each of these to reach this point
 				// so it's important to stop making new connections once the file is complete
 				return
@@ -135,7 +135,6 @@ func addResultToGlobal(c net.Conn, globalMap *SafeMap, reader *bufio.Reader) {
 	reader2 := strings.NewReader(result)
 	scanner := bufio.NewScanner(reader2)
 	scanner.Split(bufio.ScanWords) // word:count divided by spaces
-	globalMap.lock.Lock()          // acquire lock
 	for scanner.Scan() {
 		wdcount := scanner.Text()
 		wdAndCount := strings.Split(wdcount, ":")
@@ -145,9 +144,10 @@ func addResultToGlobal(c net.Conn, globalMap *SafeMap, reader *bufio.Reader) {
 		}
 		count, err := strconv.Atoi(wdAndCount[1]) //format is "word:count word2:count2"
 		helper.CheckFatalErrConn(c, err)
+		globalMap.lock.Lock()                     // acquire lock
 		globalMap.wordMap[wdAndCount[0]] += count //add to the global map
+		globalMap.lock.Unlock()
 	}
-	globalMap.lock.Unlock() //release lock
 }
 
 /*Takes a locked file object and reads some bytes, returns the array*/
@@ -197,6 +197,7 @@ func enterData(routineMap map[string]int, globalMap *SafeMap) {
 /*Writes the final word count results to an output file.*/
 func writeMapToFile(filename string, counts map[string]int) {
 	output, err := os.Create(filename)
+	fmt.Println("created file")
 	helper.CheckFatalErr(err)
 	defer output.Close() // make sure file closes before return
 	writer := bufio.NewWriter(output)

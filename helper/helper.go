@@ -6,8 +6,6 @@ import (
 	"sort"
 )
 
-// error handling for readability
-
 /**
 * Given an error object, checks whether the object is null and if not, logs
 * the error and exits.
@@ -30,7 +28,8 @@ func CheckFatalErrConn(c net.Conn, err error) {
 }
 
 /**
-*
+* Given a string:int hashmap, creates a string array of the hashmap keys and
+* returns the sorted array.
 **/
 func SortWords(freq map[string]int) []string {
 	words := make([]string, len(freq))
