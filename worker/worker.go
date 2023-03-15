@@ -3,7 +3,7 @@
 package main
 
 import (
-	"../helper"
+	"github.com/arieltraver/343-2/helper"
 	"bufio"
 	//"bytes"
 	"fmt"
