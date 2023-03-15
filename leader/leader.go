@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -247,9 +246,15 @@ func main() {
 	globalCount := &LockedInt{
 		count: 0,
 	}
+<<<<<<< HEAD
 	
 	var wait sync.WaitGroup //wait on all hosts to complete
 	alldone := make(chan int, numChunks) //check if done, with extra space
+=======
+
+	var wait sync.WaitGroup              //wait on all hosts to complete
+	alldone := make(chan int, numChunks) //for use by the routine that is making new connections
+>>>>>>> dfa148d5131b6d2c577a51d01daae24c5e59cdf1
 
 	go waitOnConnections(listener, globalMap, globalCount, globalFile, &wait, alldone)
 
