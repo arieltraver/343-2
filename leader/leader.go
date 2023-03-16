@@ -72,10 +72,11 @@ func handleConnection(c net.Conn, globalMap *SafeMap, globalCount *SafeInt, glob
 			} else {
 				sendJobName(c, chunkSize, reader)
 				b := bufio.NewWriter(c)
-				_, err := b.Write(bytes) // send chunk
+				written, err := b.Write(bytes) // send chunk
 				helper.CheckFatalErrConn(c, err)
-				_, err2 := b.WriteString(extra)
+				written2, err2 := b.WriteString(extra)
 				helper.CheckFatalErrConn(c, err2)
+				fmt.Println("bytes written:", written + written2)
 				addResultToGlobal(c, globalMap, reader)
 			}
 		default:
@@ -157,26 +158,41 @@ func addResultToGlobal(c net.Conn, globalMap *SafeMap, reader *bufio.Reader) {
 /*Takes a locked file object and reads some bytes, returns the array*/
 func grabMoreText(globalFile *SafeFile, alldone chan int) ([]byte, string, error) {
 	globalFile.lock.Lock()
-	reader := globalFile.reader
 	chunkSize := globalFile.chunkSize
+	file := globalFile.file
 	buff := make([]byte, chunkSize)
-	bytesRead, err := reader.Read(buff) // read the length of buffer from file
+	bytesRead, err := file.Read(buff) // read the length of buffer from file
 	if err != nil {
 		if err == io.EOF {
 			fmt.Println("reached end of file")
 			globalFile.lock.Unlock()
-			return nil, nil, nil
+			return nil, "", nil
 		} else {
 			log.Fatal(err)
 		}
 	}
+	extra := getStr(file) //read till next space if present
+	fmt.Println("bytes read:", bytesRead + len(extra))
 	globalFile.lock.Unlock()
-	fmt.Println("bytes read:", bytesRead)
-	extra, err := reader.ReadString(' ') //read till next space if present
-	if err != nil {
-		return buff, "", nil
-	}
 	return buff, extra, nil
+}
+
+/*reads from file until you hit a space, returns string*/
+func getStr(file *os.File) string {
+	extra := strings.Builder{}
+	b := make([]byte, 1)
+	for {
+		read, err := file.Read(b)
+		if err != nil && err != io.EOF {
+			log.Println("while grabbing extra string:", err)
+			return extra.String()
+		} else if read == 0 || b[0] == ' ' {
+			return extra.String()
+		} else {
+			extra.Grow(1)
+			extra.WriteByte(b[0])
+		}
+	}
 }
 
 // checks a locked int and returns the value
