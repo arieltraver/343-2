@@ -18,7 +18,7 @@ func main() {
 			os.Exit(1)
 		}
 		if count != sv {
-			fmt.Println("FAIL: output.txt has count " + fmt.Sprint(sk) + " for " + sk + ", but reliableOutput.txt has " + fmt.Sprint(count))
+			fmt.Println("FAIL: output.txt has count " + fmt.Sprint(sv) + " for " + sk + ", but reliableOutput.txt has " + fmt.Sprint(count))
 			os.Exit(1)
 		}
 	}

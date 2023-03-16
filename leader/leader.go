@@ -67,14 +67,13 @@ func handleConnection(c net.Conn, globalMap *SafeMap, globalCount *SafeInt, glob
 				alldone <- 1
 				c.Close()
 				// main waits on each of these to reach this point
-				// so it's important to stop making new connections once the file is complete
 				return
 			} else {
 				sendJobName(c, chunkSize, reader)
 				b := bufio.NewWriter(c)
 				written, err := b.Write(bytes) // send chunk
 				helper.CheckFatalErrConn(c, err)
-				written2, err2 := b.WriteString(extra)
+				written2, err2 := b.WriteString(extra) //to avoid word splitting
 				helper.CheckFatalErrConn(c, err2)
 				fmt.Println("bytes written:", written + written2)
 				addResultToGlobal(c, globalMap, reader)
@@ -172,6 +171,7 @@ func grabMoreText(globalFile *SafeFile, alldone chan int) ([]byte, string, error
 		}
 	}
 	extra := getStr(file) //read till next space if present
+	fmt.Print(string(buff) + extra + "\n")
 	fmt.Println("bytes read:", bytesRead + len(extra))
 	globalFile.lock.Unlock()
 	return buff, extra, nil
@@ -195,13 +195,14 @@ func getStr(file *os.File) string {
 	}
 }
 
-/*checks a locked int and returns the value*/
+/*checks a safe int and returns the value*/
 func checkCount(globalCount *SafeInt) int {
 	globalCount.lock.Lock()
 	c := globalCount.count
 	globalCount.lock.Unlock()
 	return c
 }
+/*adds to a safe int */
 func addToCount(globalCount *SafeInt, diff int) {
 	globalCount.lock.Lock()
 	globalCount.count += diff

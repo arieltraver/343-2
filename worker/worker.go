@@ -27,7 +27,6 @@ func wordcount(b []byte) map[string]int {
 	for _, wd := range words {
 		counts[wd] += 1 // increment word count in the dictionary
 	}
-
 	return counts
 }
 
