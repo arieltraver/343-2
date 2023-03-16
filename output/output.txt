@@ -1347,7 +1347,7 @@ abortion 2
 abortive 1
 abound 2
 abounding 1
-about 1496
+about 1497
 above 298
 aboveboard 1
 abraded 3
@@ -2273,7 +2273,7 @@ anchors 1
 ancient 50
 ancients 17
 anconeus 1
-and 38312
+and 38313
 anderson 2
 andover 1
 andre 2
@@ -7603,7 +7603,7 @@ czartoryski 4
 czech 1
 czechoslovakia 2
 czechs 1
-d 170
+d 169
 da 4
 dactylitis 18
 dad 7
@@ -7726,7 +7726,7 @@ dawn 22
 dawned 3
 dawning 2
 dawson 1
-day 818
+day 819
 daybreak 6
 daydreams 2
 daylight 15
@@ -14914,14 +14914,13 @@ instinct 22
 instinctive 4
 instinctively 14
 instincts 5
-institut 1
 institute 2
 instituted 15
 institutes 1
 instituting 1
 institution 21
 institutional 1
-institutions 33
+institutions 34
 instruct 4
 instructed 16
 instructing 3
@@ -19827,7 +19826,7 @@ passengers 12
 passers 3
 passes 22
 passing 134
-passion 34
+passion 35
 passionate 32
 passionately 23
 passions 29
@@ -20698,7 +20697,7 @@ pneumococcal 7
 pneumococci 2
 pneumococcus 6
 pneumonia 14
-po 4
+po 3
 pobox 4
 pocahontas 1
 pock 1
@@ -20855,7 +20854,7 @@ portentous 1
 porter 25
 porters 3
 portfolio 11
-portion 121
+portion 122
 portionless 1
 portions 56
 portly 6
@@ -26782,7 +26781,7 @@ systematically 2
 systems 13
 systole 1
 systolic 5
-t 1319
+t 1318
 ta 6
 tabernacle 2
 tabes 9
@@ -27136,12 +27135,12 @@ thanking 2
 thankless 1
 thanks 39
 thanksgiving 6
-that 12511
+that 12512
 thatch 1
 thatched 2
 thaw 2
 thawing 2
-the 80031
+the 80030
 theah 1
 theater 25
 theaters 6
@@ -27182,7 +27181,7 @@ therapy 1
 there 2972
 thereafter 4
 thereby 32
-therefore 185
+therefore 186
 therefrom 2
 therein 6
 thereof 26
@@ -27479,7 +27478,7 @@ titles 7
 tittle 1
 titus 2
 tm 128
-to 28764
+to 28766
 toast 9
 toastmaster 1
 toasts 2
@@ -29578,7 +29577,7 @@ wartime 4
 warts 15
 warty 7
 wary 3
-was 11409
+was 11410
 wascal 1
 wash 20
 washed 23
@@ -29744,9 +29743,8 @@ wens 11
 went 1008
 weported 1
 wept 27
-wer 1
 werden 2
-were 4288
+were 4289
 weren 8
 wert 1
 wesel 1
