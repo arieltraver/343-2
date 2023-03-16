@@ -195,7 +195,7 @@ func getStr(file *os.File) string {
 	}
 }
 
-// checks a locked int and returns the value
+/*checks a locked int and returns the value*/
 func checkCount(globalCount *SafeInt) int {
 	globalCount.lock.Lock()
 	c := globalCount.count

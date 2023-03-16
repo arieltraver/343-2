@@ -5,7 +5,6 @@ package main
 import (
 	"github.com/arieltraver/343-2/helper"
 	"bufio"
-	//"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -14,8 +13,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	//"time"
-	//"math/rand"
 )
 
 // read the byte array sent from the leader and finds the frequency of each word.
