@@ -14,6 +14,7 @@ import (
 )
 
 var NUMCHUNKS int = 16 //number of chunks to divide file into
+var MAXWORDSIZE int = 30 //predicted maximum word size, for avoiding splitting words, memory
 
 // a locked map structure, for the global result
 type SafeMap struct {
@@ -141,7 +142,7 @@ func grabMoreText(globalFile *SafeFile) []byte {
 	globalFile.lock.Lock()
 	chunkSize := globalFile.chunkSize
 	file := globalFile.file
-	buff := make([]byte, chunkSize)
+	buff := make([]byte, chunkSize, chunkSize + MAXWORDSIZE) //avoid reallocation
 	bytesRead, err := file.Read(buff) // read the length of buffer from file
 	if err != nil {
 		if err == io.EOF {
