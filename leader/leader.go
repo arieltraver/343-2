@@ -34,6 +34,7 @@ type SafeFile struct {
 	chunkSize int
 	file      *os.File
 	lock      sync.Mutex
+	reader    *bufio.Reader
 }
 
 /*
@@ -59,7 +60,7 @@ func handleConnection(c net.Conn, globalMap *SafeMap, globalCount *SafeInt, glob
 	for {
 		select {
 		case <-ready: // worker requests job
-			bytes, err := grabMoreText(globalFile, alldone) // grab chunk
+			bytes, extra, err := grabMoreText(globalFile, alldone) // grab chunk
 			helper.CheckFatalErrConn(c, err)
 			if bytes == nil { // no more chunks to be read
 				io.WriteString(c, "DONE\n")
@@ -70,8 +71,11 @@ func handleConnection(c net.Conn, globalMap *SafeMap, globalCount *SafeInt, glob
 				return
 			} else {
 				sendJobName(c, chunkSize, reader)
-				_, err := bufio.NewWriter(c).Write(bytes) // send chunk
+				b := bufio.NewWriter(c)
+				_, err := b.Write(bytes) // send chunk
 				helper.CheckFatalErrConn(c, err)
+				_, err2 := b.WriteString(extra)
+				helper.CheckFatalErrConn(c, err2)
 				addResultToGlobal(c, globalMap, reader)
 			}
 		default:
@@ -151,24 +155,28 @@ func addResultToGlobal(c net.Conn, globalMap *SafeMap, reader *bufio.Reader) {
 }
 
 /*Takes a locked file object and reads some bytes, returns the array*/
-func grabMoreText(globalFile *SafeFile, alldone chan int) ([]byte, error) {
+func grabMoreText(globalFile *SafeFile, alldone chan int) ([]byte, string, error) {
 	globalFile.lock.Lock()
-	file := globalFile.file
+	reader := globalFile.reader
 	chunkSize := globalFile.chunkSize
 	buff := make([]byte, chunkSize)
-	bytesRead, err := file.Read(buff) // read the length of buffer from file
+	bytesRead, err := reader.Read(buff) // read the length of buffer from file
 	if err != nil {
 		if err == io.EOF {
 			fmt.Println("reached end of file")
 			globalFile.lock.Unlock()
-			return nil, nil
+			return nil, nil, nil
 		} else {
 			log.Fatal(err)
 		}
 	}
 	globalFile.lock.Unlock()
 	fmt.Println("bytes read:", bytesRead)
-	return buff, nil
+	extra, err := reader.ReadString(' ') //read till next space if present
+	if err != nil {
+		return buff, "", nil
+	}
+	return buff, extra, nil
 }
 
 // checks a locked int and returns the value
@@ -242,8 +250,10 @@ func prepareFile(directory string, NUMCHUNKS int) *SafeFile {
 	helper.CheckFatalErr((err))
 	fileSize := fileInfo.Size()              // get file size
 	chunkSize := int(fileSize)/NUMCHUNKS + 1 //size of chunk per each host
+	reader := bufio.NewReader(file)
 
-	SafeFile := &SafeFile{chunkSize: chunkSize, file: file}
+
+	SafeFile := &SafeFile{chunkSize: chunkSize, file: file, reader: reader}
 	return SafeFile
 }
 
