@@ -69,11 +69,11 @@ func handleConnection(c net.Conn, globalMap *SafeMap, globalCount *SafeInt, glob
 				// main waits on each of these to reach this point
 				return
 			} else {
-				sendJobName(c, chunkSize, reader)
+				sendJobName(c, chunkSize + len(extra), reader)
 				b := bufio.NewWriter(c)
 				written, err := b.Write(bytes) // send chunk
 				helper.CheckFatalErrConn(c, err)
-				written2, err2 := b.WriteString(extra) //to avoid word splitting
+				written2, err2 := b.Write([]byte(extra)) //to avoid word splitting
 				helper.CheckFatalErrConn(c, err2)
 				fmt.Println("bytes written:", written + written2)
 				addResultToGlobal(c, globalMap, reader)

@@ -121,6 +121,7 @@ func okAwaitBytes(c net.Conn, chunkSize int) []byte {
 	_, err := io.WriteString(c, "ok count words\n")
 	helper.CheckFatalErrConn(c, err)
 	bytes := make([]byte, chunkSize)         //array of bytes
+	fmt.Println(len(bytes))
 	bytesRead, err2 := io.ReadFull(c, bytes) //read server's message into bytes array
 	helper.CheckFatalErrConn(c, err2)
 	fmt.Println("bytes read:", bytesRead)
