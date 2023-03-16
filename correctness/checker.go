@@ -1,3 +1,5 @@
+// From Assignment 1 starter code
+
 package main
 
 import (
@@ -8,17 +10,17 @@ import (
 )
 
 func main() {
-	our_map := file_to_map("../output/output.txt")
-	reliable_map := file_to_map("../output/reliableOutput.txt")
+	our_map := file_to_map("../output/results.txt")
+	reliable_map := file_to_map("../output/reliableResults.txt")
 
 	for sk, sv := range our_map {
 		count, ok := reliable_map[sk]
 		if !ok {
-			fmt.Println("FAIL: output.txt contains " + sk + ", but reliableOutput.txt doesn't")
+			fmt.Println("FAIL: results.txt contains " + sk + ", but reliableResults.txt doesn't")
 			//os.Exit(1)
 		}
 		if count != sv {
-			fmt.Println("FAIL: output.txt has count " + fmt.Sprint(sv) + " for " + sk + ", but reliableOutput.txt has " + fmt.Sprint(count))
+			fmt.Println("FAIL: results.txt has count " + fmt.Sprint(sv) + " for " + sk + ", but reliableResults.txt has " + fmt.Sprint(count))
 			//os.Exit(1)
 		}
 	}
