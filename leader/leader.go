@@ -46,9 +46,8 @@ func handleConnection(c net.Conn, globalMap *SafeMap, globalFile *SafeFile, wait
 	for {
 		select {
 		case <-ready: // worker requests job
-			bytes, err := grabMoreText(globalFile) // grab file chunk
-			helper.CheckFatalErrConn(c, err)
-			if bytes == nil { // no more chunks to be read
+			bytes := grabMoreText(globalFile) // grab file chunk
+			if bytes == nil {                 // no more chunks to be read
 				io.WriteString(c, "DONE\n")
 				c.Close()
 				alldone <- 1
@@ -123,7 +122,7 @@ func addResultToGlobal(c net.Conn, globalMap *SafeMap, reader *bufio.Reader) {
 	scanner := bufio.NewScanner(reader2)
 	scanner.Split(bufio.ScanWords) // word:count divided by spaces
 	for scanner.Scan() {
-		wdAndCount := strings.Split(scanner.Text(), ":")
+		wdAndCount := strings.Split(scanner.Text(), ":") // word:count to [word, count]
 		if len(wdAndCount) != 2 {
 			c.Close()
 			log.Fatal("unexpected entry")
@@ -138,7 +137,7 @@ func addResultToGlobal(c net.Conn, globalMap *SafeMap, reader *bufio.Reader) {
 
 // Reads a predetermined amount of bytes from a SafeFile and returns the
 // corresponding byte array and the remainder of any words that were cut off.
-func grabMoreText(globalFile *SafeFile) ([]byte, error) {
+func grabMoreText(globalFile *SafeFile) []byte {
 	globalFile.lock.Lock()
 	chunkSize := globalFile.chunkSize
 	file := globalFile.file
@@ -148,7 +147,7 @@ func grabMoreText(globalFile *SafeFile) ([]byte, error) {
 		if err == io.EOF {
 			fmt.Println("reached end of file")
 			globalFile.lock.Unlock()
-			return nil, nil
+			return nil
 		} else {
 			log.Fatal(err)
 		}
@@ -157,7 +156,7 @@ func grabMoreText(globalFile *SafeFile) ([]byte, error) {
 	fmt.Println("bytes read:", bytesRead+len(extra))
 	globalFile.lock.Unlock()
 	chunk := append(buff, extra...)
-	return chunk, nil
+	return chunk
 }
 
 // Reads from file up to encountering whitespace. Used to account for words
@@ -193,10 +192,10 @@ func writeMapToFile(filename string, globalMap *SafeMap) {
 		str := key + " " + strconv.Itoa(globalMap.wordMap[key]) + "\n"
 		_, err := writer.WriteString(str)
 		helper.CheckFatalErr(err)
+		writer.Flush()
 	}
 
 	globalMap.lock.Unlock()
-	writer.Flush()
 }
 
 // Waits for new connections on port (specified by net.Listener). Serves each
